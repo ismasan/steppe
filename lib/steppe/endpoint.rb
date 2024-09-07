@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'steppe/responder'
+require 'steppe/responder_registry'
 require 'steppe/serializer'
 require 'steppe/result'
 
@@ -14,7 +15,7 @@ module Steppe
       @name = name
       @verb = :get
       @path = '/'
-      @responders = {}
+      @responders = ResponderRegistry.new
       @query_schema = Types::Any
       @payload_schema = Types::Any
       super(&)
@@ -57,7 +58,7 @@ module Steppe
             summary: 'TODO',
             description: 'TODO',
             parameters: [],
-            responses: @responders.values.each.reduce({}) { |ret, r| ret.merge(r.to_open_api) }
+            responses: @responders.each.reduce({}) { |ret, r| ret.merge(r.to_open_api) }
           }
         }
       }
@@ -71,8 +72,21 @@ module Steppe
       self
     end
 
-    def respond(status, responder = nil, &)
-      @responders[status] = responder || Responder.new(status:, &)
+    def respond(*args, &)
+      case args
+      in [Integer => status] if block_given?
+        @responders << Responder.new(statuses: (status..status), &)
+      in [Integer => status, String => accepts] if block_given?
+        @responders << Responder.new(statuses: status, accepts:, &)
+      in [Range => statuses] if block_given?
+        @responders << Responder.new(statuses:, &)
+      in [Range => statuses, String => accepts] if block_given?
+        @responders << Responder.new(statuses:, accepts:, &)
+      in [Responder => responder]
+        @responders << responder
+      else
+        raise ArgumentError, "Invalid arguments: #{args.inspect}"
+      end
       self
     end
 
@@ -84,7 +98,8 @@ module Steppe
     def call(result)
       result = super(result)
       status = result.response.status
-      responder = @responders.find { |st, re| st === status }&.last || DEFAULT_RESPONDER
+      # responder = @responders.find { |st, re| st === status }&.last || DEFAULT_RESPONDER
+      responder = @responders.resolve(result) || DEFAULT_RESPONDER
       responder.call(result)
     end
   end

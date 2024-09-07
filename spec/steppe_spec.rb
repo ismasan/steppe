@@ -19,7 +19,15 @@ RSpec.describe Steppe do
         id: Steppe::Types::Integer
       )
       e.step do |conn|
+        conn.response.status = 201
         conn.valid(user_class.new(conn.request.params['id'], 'Joe'))
+      end
+
+      e.respond 201, 'text/plain' do |r|
+        r.step do |conn|
+          debugger
+          conn
+        end
       end
 
       e.serialize do
@@ -34,7 +42,8 @@ RSpec.describe Steppe do
     now = Time.now
     allow(Time).to receive(:now).and_return(now)
 
-    request = Rack::Request.new(Rack::MockRequest.env_for('/users/1?id=1', 'CONTENT_TYPE' => 'application/json'))
+    request = Rack::Request.new(Rack::MockRequest.env_for('/users/1?id=1', 'CONTENT_TYPE' => 'application/json',
+                                                                           'HTTP_ACCEPT' => 'application/json'))
     result = endpoint.run(request)
     expect(result.response.content_type).to eq('application/json')
     expect(JSON.parse(result.response.body)).to eq('requested_at' => now.iso8601, 'id' => '1', 'name' => 'Joe')

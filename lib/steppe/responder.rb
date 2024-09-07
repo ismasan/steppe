@@ -4,12 +4,13 @@ require 'json'
 
 module Steppe
   class Responder < Plumb::Pipeline
-    attr_reader :status, :serializer
+    DEFAULT_STATUSES = (200..200).freeze
 
-    attr_reader :status
+    attr_reader :statuses, :accepts, :serializer
 
-    def initialize(status: 200, &)
-      @status = status
+    def initialize(statuses: DEFAULT_STATUSES, accepts: ContentTypes::JSON, &)
+      @statuses = statuses.is_a?(Range) ? statuses : (statuses..statuses)
+      @accepts = accepts
       @serializer = Types::Static[{}.freeze]
       super(&)
     end
@@ -17,6 +18,14 @@ module Steppe
     def serialize(serializer = nil, &block)
       @serializer = serializer || Class.new(Serializer, &block)
       step @serializer
+    end
+
+    # TODO: Content negotiation here
+    # Perhaps wrap Request in this
+    # https://github.com/sinatra/sinatra/blob/main/lib/sinatra/base.rb
+    def accepts?(request)
+      accept_header = request.env['HTTP_ACCEPT'] || request.content_type || ContentTypes::JSON
+      accepts == accept_header
     end
 
     def call(result)
@@ -35,7 +44,7 @@ module Steppe
         status.to_s => {
           description: 'TODO',
           content: {
-            'application/json' => {
+            @accepts => {
               schema: @serializer.to_json_schema
             }
           }
