@@ -41,11 +41,11 @@ RSpec.describe Steppe::Endpoint do
   end
 
   describe '#query_schema' do
-    it 'builds #query_schema from path params' do
+    it 'builds #params_schema from path params' do
       endpoint = Steppe::Endpoint.new(:test) do |e|
         e.path '/users/:id'
       end
-      endpoint.query_schema.at_key(:id).tap do |field|
+      endpoint.params_schema.at_key(:id).tap do |field|
         expect(field).to be_a(Plumb::Composable)
         expect(field.metadata[:type]).to eq(String)
         expect(field.metadata[:in]).to eq(:path)
@@ -61,11 +61,11 @@ RSpec.describe Steppe::Endpoint do
         )
       end
 
-      endpoint.query_schema.at_key(:id).tap do |field|
+      endpoint.params_schema.at_key(:id).tap do |field|
         expect(field.metadata[:type]).to eq(Integer)
         expect(field.metadata[:in]).to eq(:path)
       end
-      endpoint.query_schema.at_key(:q).tap do |field|
+      endpoint.params_schema.at_key(:q).tap do |field|
         expect(field.metadata[:type]).to eq(String)
         expect(field.metadata[:in]).to eq(:query)
       end
@@ -80,8 +80,8 @@ RSpec.describe Steppe::Endpoint do
         e.path '/users/:id'
         e.step step_with_query_schema.new(Steppe::Types::Hash[max: Integer])
       end
-      expect(endpoint.query_schema.at_key(:id).metadata[:in]).to eq(:path)
-      expect(endpoint.query_schema.at_key(:max).metadata[:in]).to eq(:query)
+      expect(endpoint.params_schema.at_key(:id).metadata[:in]).to eq(:path)
+      expect(endpoint.params_schema.at_key(:max).metadata[:in]).to eq(:query)
     end
   end
 end

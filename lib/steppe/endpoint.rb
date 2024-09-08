@@ -10,15 +10,14 @@ module Steppe
   class Endpoint < Plumb::Pipeline
     DEFAULT_RESPONDER = Responder.new
 
-    attr_reader :name
+    attr_reader :name, :params_schema
 
     def initialize(name, &)
       @name = name
       @verb = :get
       @path = Mustermann.new('/')
       @responders = ResponderRegistry.new
-      @query_schema = Types::Hash
-      @payload_schema = Types::Hash
+      @params_schema = Types::Hash
       super(&)
     end
 
@@ -29,14 +28,10 @@ module Steppe
         @query_schema = schema
       end
 
-      def call(result)
-        result
-      end
+      def call(result) = result
     end
 
-    def query_schema(sc = nil)
-      return @query_schema unless sc
-
+    def query_schema(sc)
       step(QueryValidator.new(sc))
     end
 
@@ -53,7 +48,7 @@ module Steppe
     def path(pth = nil)
       if pth
         @path = Mustermann.new(pth)
-        build_query_schema_from_path!
+        merge_path_params_into_params_schema!
       end
       @path
     end
@@ -121,17 +116,17 @@ module Steppe
         pin = @path.names.include?(k.to_s) ? :path : :query
         h[k] = v.metadata(in: pin)
       end
-      @query_schema += annotated_sc
+      @params_schema += annotated_sc
     end
 
-    def build_query_schema_from_path!
+    def merge_path_params_into_params_schema!
       sc = @path.names.each_with_object({}) do |name, h| 
         name = name.to_sym
-        field = @query_schema.at_key(name) || Steppe::Types::String
+        field = @params_schema.at_key(name) || Steppe::Types::String
         field = field.metadata(in: :path)
         h[name] = field
       end
-      @query_schema += sc
+      @params_schema += sc
     end
   end
 end
