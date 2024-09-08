@@ -70,5 +70,18 @@ RSpec.describe Steppe::Endpoint do
         expect(field.metadata[:in]).to eq(:query)
       end
     end
+
+    it 'merges query schema fields from steps that respond to #query_schema' do
+      step_with_query_schema = Data.define(:query_schema) do
+        def call(result) = result
+      end
+
+      endpoint = Steppe::Endpoint.new(:test) do |e|
+        e.path '/users/:id'
+        e.step step_with_query_schema.new(Steppe::Types::Hash[max: Integer])
+      end
+      expect(endpoint.query_schema.at_key(:id).metadata[:in]).to eq(:path)
+      expect(endpoint.query_schema.at_key(:max).metadata[:in]).to eq(:query)
+    end
   end
 end
