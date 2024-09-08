@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'mustermann'
 require 'steppe/responder'
 require 'steppe/responder_registry'
 require 'steppe/serializer'
@@ -14,16 +15,18 @@ module Steppe
     def initialize(name, &)
       @name = name
       @verb = :get
-      @path = '/'
+      @path = Mustermann.new('/')
       @responders = ResponderRegistry.new
-      @query_schema = Types::Any
-      @payload_schema = Types::Any
+      @query_schema = Types::Hash
+      @payload_schema = Types::Hash
       super(&)
     end
 
     class QueryValidator
+      attr_reader :query_schema
+
       def initialize(schema)
-        @schema = schema
+        @query_schema = schema
       end
 
       def call(result)
@@ -31,9 +34,10 @@ module Steppe
       end
     end
 
-    def query_schema(sc = {})
-      @query_schema = Types::Hash[sc]
-      step QueryValidator.new(@query_schema)
+    def query_schema(sc = nil)
+      return @query_schema unless sc
+
+      step(QueryValidator.new(sc))
     end
 
     # def payload_schema(sc = {})
@@ -47,7 +51,10 @@ module Steppe
     end
 
     def path(pth = nil)
-      @path = pth if pth
+      if pth
+        @path = Mustermann.new(pth)
+        build_query_schema_from_path!
+      end
       @path
     end
 
@@ -97,10 +104,34 @@ module Steppe
 
     def call(result)
       result = super(result)
-      status = result.response.status
-      # responder = @responders.find { |st, re| st === status }&.last || DEFAULT_RESPONDER
       responder = @responders.resolve(result) || DEFAULT_RESPONDER
       responder.call(result)
+    end
+
+    private
+
+    def prepare_step(callable)
+      merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)
+      callable
+    end
+
+    def merge_query_schema(sc)
+      sc = sc._schema if sc.respond_to?(:_schema)
+      annotated_sc = sc.each_with_object({}) do |(k, v), h|
+        pin = @path.names.include?(k.to_s) ? :path : :query
+        h[k] = v.metadata(in: pin)
+      end
+      @query_schema += annotated_sc
+    end
+
+    def build_query_schema_from_path!
+      sc = @path.names.each_with_object({}) do |name, h| 
+        name = name.to_sym
+        field = @query_schema.at_key(name) || Steppe::Types::String
+        field = field.metadata(in: :path)
+        h[name] = field
+      end
+      @query_schema += sc
     end
   end
 end

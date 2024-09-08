@@ -3,6 +3,7 @@ PATH
   specs:
     steppe (0.1.0)
       mime-types (>= 3.0)
+      mustermann
       plumb
       rack (>= 3.0)
 
@@ -29,6 +30,8 @@ GEM
     mime-types (3.5.2)
       mime-types-data (~> 3.2015)
     mime-types-data (3.2024.0903)
+    mustermann (3.0.3)
+      ruby2_keywords (~> 0.0.1)
     psych (5.1.2)
       stringio
     rack (3.1.7)
@@ -52,6 +55,7 @@ GEM
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.13.0)
     rspec-support (3.13.1)
+    ruby2_keywords (0.0.5)
     stringio (3.1.1)
 
 PLATFORMS

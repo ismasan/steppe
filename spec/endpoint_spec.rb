@@ -39,4 +39,36 @@ RSpec.describe Steppe::Endpoint do
     expect(result.response.content_type).to eq('application/json')
     expect(JSON.parse(result.response.body)).to eq('requested_at' => now.iso8601, 'id' => '1', 'name' => 'Joe')
   end
+
+  describe '#query_schema' do
+    it 'builds #query_schema from path params' do
+      endpoint = Steppe::Endpoint.new(:test) do |e|
+        e.path '/users/:id'
+      end
+      endpoint.query_schema.at_key(:id).tap do |field|
+        expect(field).to be_a(Plumb::Composable)
+        expect(field.metadata[:type]).to eq(String)
+        expect(field.metadata[:in]).to eq(:path)
+      end
+    end
+
+    it 'overrides path params definitions while keeping :in metadata' do
+      endpoint = Steppe::Endpoint.new(:test) do |e|
+        e.path '/users/:id'
+        e.query_schema(
+          id: Steppe::Types::Lax::Integer[10..100],
+          q?: Steppe::Types::String
+        )
+      end
+
+      endpoint.query_schema.at_key(:id).tap do |field|
+        expect(field.metadata[:type]).to eq(Integer)
+        expect(field.metadata[:in]).to eq(:path)
+      end
+      endpoint.query_schema.at_key(:q).tap do |field|
+        expect(field.metadata[:type]).to eq(String)
+        expect(field.metadata[:in]).to eq(:query)
+      end
+    end
+  end
 end

@@ -33,6 +33,7 @@ Gem::Specification.new do |spec|
 
   # Uncomment to register a new dependency of your gem
   spec.add_dependency 'mime-types', '>= 3.0'
+  spec.add_dependency 'mustermann'
   spec.add_dependency 'plumb'
   spec.add_dependency 'rack', '>= 3.0'
 
