@@ -84,4 +84,15 @@ RSpec.describe Steppe::Endpoint do
       expect(endpoint.params_schema.at_key(:max).metadata[:in]).to eq(:query)
     end
   end
+
+  describe '#payload_schema' do
+    it 'adds fields to #params_schema' do
+      endpoint = Steppe::Endpoint.new(:test) do |e|
+        e.path '/users/:id'
+        e.payload_schema(name: String)
+      end
+      expect(endpoint.params_schema.at_key(:id).metadata[:in]).to eq(:path)
+      expect(endpoint.params_schema.at_key(:name).metadata[:in]).to eq(:body)
+    end
+  end
 end

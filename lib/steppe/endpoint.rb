@@ -21,18 +21,20 @@ module Steppe
       super(&)
     end
 
-    class QueryValidator
-      attr_reader :query_schema
+    QueryValidator = Data.define(:query_schema) do
+      def call(result) = result
+    end
 
-      def initialize(schema)
-        @query_schema = schema
-      end
-
+    PayloadValidator = Data.define(:payload_schema) do
       def call(result) = result
     end
 
     def query_schema(sc)
       step(QueryValidator.new(sc))
+    end
+
+    def payload_schema(sc)
+      step PayloadValidator.new(sc)
     end
 
     # def payload_schema(sc = {})
@@ -107,6 +109,7 @@ module Steppe
 
     def prepare_step(callable)
       merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)
+      merge_payload_schema(callable.payload_schema) if callable.respond_to?(:payload_schema)
       callable
     end
 
@@ -114,7 +117,15 @@ module Steppe
       sc = sc._schema if sc.respond_to?(:_schema)
       annotated_sc = sc.each_with_object({}) do |(k, v), h|
         pin = @path.names.include?(k.to_s) ? :path : :query
-        h[k] = v.metadata(in: pin)
+        h[k] = Plumb::Composable.wrap(v).metadata(in: pin)
+      end
+      @params_schema += annotated_sc
+    end
+
+    def merge_payload_schema(sc)
+      sc = sc._schema if sc.respond_to?(:_schema)
+      annotated_sc = sc.each_with_object({}) do |(k, v), h|
+        h[k] = Plumb::Composable.wrap(v).metadata(in: :body)
       end
       @params_schema += annotated_sc
     end
