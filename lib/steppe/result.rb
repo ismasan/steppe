@@ -22,7 +22,7 @@ module Steppe
     end
 
     def copy(value: @value, params: @params, errors: @errors, request: @request, response: @response)
-      self.class.new(value, errors:, request:, response:)
+      self.class.new(value, params:, errors:, request:, response:)
     end
 
     def valid(val = value)

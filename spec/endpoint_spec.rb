@@ -98,8 +98,8 @@ RSpec.describe Steppe::Endpoint do
   end
 
   describe 'validating params' do
-    it 'sets status to 422 and uses built-in errors serializer' do
-      endpoint = Steppe::Endpoint.new(:test) do |e|
+    subject(:endpoint) do
+      Steppe::Endpoint.new(:test) do |e|
         e.path '/users'
         e.verb :post
         e.payload_schema(
@@ -107,14 +107,32 @@ RSpec.describe Steppe::Endpoint do
           age: Steppe::Types::Lax::Integer[18..]
         )
       end
+    end
 
-      request = Rack::Request.new(Rack::MockRequest.env_for('/users/1'))
-      allow(request).to receive(:params).and_return(name: 'Joe', age: '17')
-      result = endpoint.run(request)
-      expect(result.valid?).to be false
-      expect(result.response.status).to eq(422)
-      expect(result.response.content_type).to eq('application/json')
-      expect(JSON.parse(result.response.body)).to eq('errors' => { 'age' => 'Must be within 18..' })
+    context 'with invalid params' do
+      it 'sets status to 422 and uses built-in errors serializer' do
+        request = Rack::Request.new(Rack::MockRequest.env_for('/users/1'))
+        allow(request).to receive(:params).and_return(name: 'Joe', age: '17')
+        result = endpoint.run(request)
+        expect(result.valid?).to be false
+        expect(result.response.status).to eq(422)
+        expect(result.response.content_type).to eq('application/json')
+        expect(JSON.parse(result.response.body)).to eq('errors' => { 'age' => 'Must be within 18..' })
+      end
+    end
+
+    context 'with valid params and no explicit responder' do
+      it 'uses default responder/serializer' do
+        request = Rack::Request.new(Rack::MockRequest.env_for('/users/1'))
+        allow(request).to receive(:params).and_return(name: 'Joe', age: '19')
+        result = endpoint.run(request)
+        expect(result.valid?).to be true
+        expect(result.response.status).to eq(200)
+        expect(JSON.parse(result.response.body)).to eq(
+          'message' => 'This endpoint has no responder/serializer defined for HTTP status 200',
+          'params' => { 'name' => 'Joe', 'age' => 19 }
+        )
+      end
     end
   end
 end

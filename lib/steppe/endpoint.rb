@@ -8,11 +8,19 @@ require 'steppe/result'
 
 module Steppe
   class Endpoint < Plumb::Pipeline
-    DEFAULT_RESPONDER = Responder.new
-    DEFAULT_ERROR_RESPONDER = Responder.new(statuses: (400...500)) do |r|
+    DEFAULT_CLIENT_ERROR_RESPONDER = Responder.new(statuses: 400...500) do |r|
       r.serialize do
         attribute :errors, Steppe::Types::Hash
         def errors = result.errors
+      end
+    end
+
+    FALLBACK_RESPONDER = Responder.new(statuses: 100...500) do |r|
+      r.serialize do
+        attribute :message, Steppe::Types::String
+        attribute :params, Steppe::Types::Hash
+        def params = result.params
+        def message = "This endpoint has no responder/serializer defined for HTTP status #{result.response.status}"
       end
     end
 
@@ -25,7 +33,8 @@ module Steppe
       @responders = ResponderRegistry.new
       @params_schema = Types::Hash
       super(&)
-      respond DEFAULT_ERROR_RESPONDER
+      respond DEFAULT_CLIENT_ERROR_RESPONDER
+      respond FALLBACK_RESPONDER
     end
 
     QueryValidator = Data.define(:query_schema) do
@@ -104,7 +113,7 @@ module Steppe
     def call(result)
       result = validate_params(result)
       result = super(result) if result.valid?
-      responder = @responders.resolve(result) || DEFAULT_RESPONDER
+      responder = @responders.resolve(result)
       responder.call(result)
     end
 
@@ -112,7 +121,8 @@ module Steppe
 
     def validate_params(result)
       params_result = @params_schema.resolve(result.request.params)
-      return result.copy(params: params_result.value) if params_result.valid?
+      result = result.copy(params: params_result.value)
+      return result if params_result.valid?
 
       result.response.status = 422
       result.invalid(errors: params_result.errors)
