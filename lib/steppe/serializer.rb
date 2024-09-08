@@ -16,7 +16,7 @@ module Steppe
 
       def call(result)
         hash = new(result).serialize
-        result.valid(hash)
+        result.copy(value: hash)
       end
     end
 

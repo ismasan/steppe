@@ -4,10 +4,11 @@ require 'rack'
 
 module Steppe
   class Result
-    attr_reader :value, :errors, :request, :response
+    attr_reader :value, :params, :errors, :request, :response
 
-    def initialize(value, errors: {}, request:, response: nil)
+    def initialize(value, params: {}, errors: {}, request:, response: nil)
       @value = value
+      @params = params
       @errors = errors
       @request = request
       @response = response || Rack::Response.new('', 200, {})
@@ -20,7 +21,7 @@ module Steppe
       %(<#{self.class}##{object_id} [#{response.status}] value:#{value.inspect} errors:#{errors.inspect}>)
     end
 
-    def copy(value: @value, errors: @errors, request: @request, response: @response)
+    def copy(value: @value, params: @params, errors: @errors, request: @request, response: @response)
       self.class.new(value, errors:, request:, response:)
     end
 

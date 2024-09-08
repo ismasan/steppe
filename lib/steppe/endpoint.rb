@@ -9,6 +9,12 @@ require 'steppe/result'
 module Steppe
   class Endpoint < Plumb::Pipeline
     DEFAULT_RESPONDER = Responder.new
+    DEFAULT_ERROR_RESPONDER = Responder.new(statuses: (400...500)) do |r|
+      r.serialize do
+        attribute :errors, Steppe::Types::Hash
+        def errors = result.errors
+      end
+    end
 
     attr_reader :name, :params_schema
 
@@ -19,6 +25,7 @@ module Steppe
       @responders = ResponderRegistry.new
       @params_schema = Types::Hash
       super(&)
+      respond DEFAULT_ERROR_RESPONDER
     end
 
     QueryValidator = Data.define(:query_schema) do
@@ -36,11 +43,6 @@ module Steppe
     def payload_schema(sc)
       step PayloadValidator.new(sc)
     end
-
-    # def payload_schema(sc = {})
-    #   @payload_schema = Types::Hash[sc]
-    #   step PayloadValidator.new(@payload_schema)
-    # end
 
     def verb(vrb = nil)
       @verb = vrb if vrb
@@ -100,12 +102,21 @@ module Steppe
     end
 
     def call(result)
-      result = super(result)
+      result = validate_params(result)
+      result = super(result) if result.valid?
       responder = @responders.resolve(result) || DEFAULT_RESPONDER
       responder.call(result)
     end
 
     private
+
+    def validate_params(result)
+      params_result = @params_schema.resolve(result.request.params)
+      return result.copy(params: params_result.value) if params_result.valid?
+
+      result.response.status = 422
+      result.invalid(errors: params_result.errors)
+    end
 
     def prepare_step(callable)
       merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)

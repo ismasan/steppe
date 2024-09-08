@@ -12,10 +12,10 @@ RSpec.describe Steppe::Endpoint do
       e.path '/users/:id'
       e.verb :get
       e.query_schema(
-        id: Steppe::Types::Integer
+        id: Steppe::Types::Lax::Integer
       )
       e.step do |conn|
-        conn.valid(user_class.new(conn.request.params['id'], 'Joe'))
+        conn.valid(user_class.new(conn.request.params[:id], 'Joe'))
       end
 
       # Compact syntax. Registers a responder
@@ -33,9 +33,10 @@ RSpec.describe Steppe::Endpoint do
     now = Time.now
     allow(Time).to receive(:now).and_return(now)
 
-    request = Rack::Request.new(Rack::MockRequest.env_for('/users/1?id=1', 'CONTENT_TYPE' => 'application/json',
-                                                                           'HTTP_ACCEPT' => 'application/json'))
+    request = Rack::Request.new(Rack::MockRequest.env_for('/users/1', 'CONTENT_TYPE' => 'application/json'))
+    allow(request).to receive(:params).and_return(id: '1')
     result = endpoint.run(request)
+    expect(result.response.status).to eq(200)
     expect(result.response.content_type).to eq('application/json')
     expect(JSON.parse(result.response.body)).to eq('requested_at' => now.iso8601, 'id' => '1', 'name' => 'Joe')
   end
@@ -93,6 +94,27 @@ RSpec.describe Steppe::Endpoint do
       end
       expect(endpoint.params_schema.at_key(:id).metadata[:in]).to eq(:path)
       expect(endpoint.params_schema.at_key(:name).metadata[:in]).to eq(:body)
+    end
+  end
+
+  describe 'validating params' do
+    it 'sets status to 422 and uses built-in errors serializer' do
+      endpoint = Steppe::Endpoint.new(:test) do |e|
+        e.path '/users'
+        e.verb :post
+        e.payload_schema(
+          name: Steppe::Types::String.present,
+          age: Steppe::Types::Lax::Integer[18..]
+        )
+      end
+
+      request = Rack::Request.new(Rack::MockRequest.env_for('/users/1'))
+      allow(request).to receive(:params).and_return(name: 'Joe', age: '17')
+      result = endpoint.run(request)
+      expect(result.valid?).to be false
+      expect(result.response.status).to eq(422)
+      expect(result.response.content_type).to eq('application/json')
+      expect(JSON.parse(result.response.body)).to eq('errors' => { 'age' => 'Must be within 18..' })
     end
   end
 end
