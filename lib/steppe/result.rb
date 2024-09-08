@@ -26,11 +26,11 @@ module Steppe
     end
 
     def valid(val = value)
-      Continue.new(val, errors:, request:, response:)
+      Continue.new(val, params:, errors:, request:, response:)
     end
 
     def invalid(val = value, errors: {})
-      Halt.new(val, errors:, request:, response:)
+      Halt.new(val, params:, errors:, request:, response:)
     end
 
     def continue(...) = valid(...)

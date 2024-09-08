@@ -117,7 +117,11 @@ RSpec.describe Steppe::Endpoint do
         expect(result.valid?).to be false
         expect(result.response.status).to eq(422)
         expect(result.response.content_type).to eq('application/json')
-        expect(JSON.parse(result.response.body)).to eq('errors' => { 'age' => 'Must be within 18..' })
+        expect(JSON.parse(result.response.body)).to eq(
+          'http' => { 'status' => 422 },
+          'params' => { 'name' => 'Joe', 'age' => 17 },
+          'errors' => { 'age' => 'Must be within 18..' }
+        )
       end
     end
 
@@ -129,8 +133,9 @@ RSpec.describe Steppe::Endpoint do
         expect(result.valid?).to be true
         expect(result.response.status).to eq(200)
         expect(JSON.parse(result.response.body)).to eq(
-          'message' => 'This endpoint has no responder/serializer defined for HTTP status 200',
-          'params' => { 'name' => 'Joe', 'age' => 19 }
+          'http' => { 'status' => 200 },
+          'params' => { 'name' => 'Joe', 'age' => 19 },
+          'errors' => {}
         )
       end
     end

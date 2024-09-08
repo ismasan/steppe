@@ -8,19 +8,15 @@ require 'steppe/result'
 
 module Steppe
   class Endpoint < Plumb::Pipeline
-    DEFAULT_CLIENT_ERROR_RESPONDER = Responder.new(statuses: 400...500) do |r|
-      r.serialize do
-        attribute :errors, Steppe::Types::Hash
-        def errors = result.errors
-      end
-    end
-
     FALLBACK_RESPONDER = Responder.new(statuses: 100...500) do |r|
       r.serialize do
-        attribute :message, Steppe::Types::String
+        attribute :http, Steppe::Types::Hash[status: Integer]
         attribute :params, Steppe::Types::Hash
+        attribute :errors, Steppe::Types::Hash
+
+        def http = { status: result.response.status }
         def params = result.params
-        def message = "This endpoint has no responder/serializer defined for HTTP status #{result.response.status}"
+        def errors = result.errors
       end
     end
 
@@ -33,7 +29,6 @@ module Steppe
       @responders = ResponderRegistry.new
       @params_schema = Types::Hash
       super(&)
-      respond DEFAULT_CLIENT_ERROR_RESPONDER
       respond FALLBACK_RESPONDER
     end
 
