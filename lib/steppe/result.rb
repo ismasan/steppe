@@ -25,6 +25,11 @@ module Steppe
       self.class.new(value, params:, errors:, request:, response:)
     end
 
+    def reset(value)
+      @value = value
+      self
+    end
+
     def valid(val = value)
       Continue.new(val, params:, errors:, request:, response:)
     end

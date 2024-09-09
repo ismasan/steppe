@@ -8,9 +8,7 @@ RSpec.describe Steppe::Endpoint do
   end
 
   specify 'processing request and building response' do
-    endpoint = Steppe::Endpoint.new(:test) do |e|
-      e.path '/users/:id'
-      e.verb :get
+    endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
       e.query_schema(
         id: Steppe::Types::Lax::Integer
       )
@@ -43,9 +41,8 @@ RSpec.describe Steppe::Endpoint do
 
   describe '#query_schema' do
     it 'builds #params_schema from path params' do
-      endpoint = Steppe::Endpoint.new(:test) do |e|
-        e.path '/users/:id'
-      end
+      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id')
+
       endpoint.params_schema.at_key(:id).tap do |field|
         expect(field).to be_a(Plumb::Composable)
         expect(field.metadata[:type]).to eq(String)
@@ -54,8 +51,7 @@ RSpec.describe Steppe::Endpoint do
     end
 
     it 'overrides path params definitions while keeping :in metadata' do
-      endpoint = Steppe::Endpoint.new(:test) do |e|
-        e.path '/users/:id'
+      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
         e.query_schema(
           id: Steppe::Types::Lax::Integer[10..100],
           q?: Steppe::Types::String
@@ -77,8 +73,7 @@ RSpec.describe Steppe::Endpoint do
         def call(result) = result
       end
 
-      endpoint = Steppe::Endpoint.new(:test) do |e|
-        e.path '/users/:id'
+      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
         e.step step_with_query_schema.new(Steppe::Types::Hash[max: Integer])
       end
       expect(endpoint.params_schema.at_key(:id).metadata[:in]).to eq(:path)
@@ -88,8 +83,7 @@ RSpec.describe Steppe::Endpoint do
 
   describe '#payload_schema' do
     it 'adds fields to #params_schema' do
-      endpoint = Steppe::Endpoint.new(:test) do |e|
-        e.path '/users/:id'
+      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
         e.payload_schema(name: String)
       end
       expect(endpoint.params_schema.at_key(:id).metadata[:in]).to eq(:path)
@@ -99,9 +93,7 @@ RSpec.describe Steppe::Endpoint do
 
   describe 'validating params' do
     subject(:endpoint) do
-      Steppe::Endpoint.new(:test) do |e|
-        e.path '/users'
-        e.verb :post
+      Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
         e.payload_schema(
           name: Steppe::Types::String.present,
           age: Steppe::Types::Lax::Integer[18..]

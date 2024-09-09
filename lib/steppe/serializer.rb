@@ -36,7 +36,7 @@ module Steppe
     def serialize_attribute(key, type)
       # Ex. value = self.name
       value = send(key)
-      type.resolve(value).value
+      type.call(result.copy(value:)).value
     end
   end
 end
