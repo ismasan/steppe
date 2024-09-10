@@ -1,11 +1,7 @@
 # frozen_string_literal: true
 
-require 'plumb/visitor_handlers'
-
 module Steppe
-  class OpenAPIVisitor
-    include Plumb::VisitorHandlers
-
+  class OpenAPIVisitor < Plumb::JSONSchemaVisitor
     ENVELOPE = {
       'openapi' => '3.0.0'
     }.freeze
@@ -63,7 +59,7 @@ module Steppe
       content = status_prop['content'] || {}
       content = content.merge(
         responder.accepts.to_s => {
-          'schema' => responder.serializer.to_json_schema
+          'schema' => visit(responder.serializer)
         }
       )
       status_prop = status_prop.merge(
@@ -79,7 +75,7 @@ module Steppe
         h[name.to_s] = type if ins.include?(type.metadata[:in])
       end
       specs.map do |name, type|
-        spec = type.to_json_schema
+        spec = visit(type)
         # Here we should recursively visit the type
         # to extract metadata, etc.
         meta = type.metadata.reduce({}) { |m, (k, v)| m.merge(k.to_s => v.to_s.downcase) }
