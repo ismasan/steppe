@@ -30,10 +30,10 @@ module Steppe
       path = paths[path_template] || {}
       verb = path[node.verb.to_s] || {}
       verb = verb.merge(
-        'summary' => node.rel_name,
+        'summary' => node.rel_name.to_s,
         # operationId can be used for links
         # https://swagger.io/docs/specification/links/
-        'operationId' => node.rel_name,
+        'operationId' => node.rel_name.to_s,
         'description' => node.description,
         'parameters' => visit_parameters(node.params_schema),
         'responses' => visit(node.responders)
