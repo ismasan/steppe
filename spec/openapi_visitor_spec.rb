@@ -3,7 +3,7 @@
 require 'rack'
 
 RSpec.describe Steppe::OpenAPIVisitor do
-  specify 'GET Steppe::Endpoint' do
+  specify 'request parameters schema' do
     endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
       e.description = 'Test endpoint'
       e.query_schema(
@@ -25,14 +25,28 @@ RSpec.describe Steppe::OpenAPIVisitor do
     end
   end
 
-  specify 'POST Steppe::Endpoint with serializer' do
+  specify 'request parameters schema' do
     endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
       e.description = 'Test endpoint'
       e.payload_schema(
         name: Steppe::Types::String.desc('user name'),
         email: Steppe::Types::Email.desc('user email')
       )
+    end
+    data = described_class.new.visit(endpoint)
+    expect(data.dig('/users', 'post', 'requestBody', 'required')).to be(true)
+    expect(data.dig('/users', 'post', 'requestBody', 'content', 'application/json')).to eq({
+                                                                                             'schema' => {
+                                                                                               'properties' => { 'email' => { 'description' => 'user email', 'format' => 'email', 'type' => 'string' },
+                                                                                                                 'name' => { 'description' => 'user name',
+                                                                                                                             'type' => 'string' } }, 'required' => %w[name email], 'type' => 'object'
+                                                                                             }
+                                                                                           })
+  end
 
+  specify 'response body schema' do
+    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+      e.description = 'Test endpoint'
       e.serialize do
         attribute :name, String
         attribute :email, Steppe::Types::Email

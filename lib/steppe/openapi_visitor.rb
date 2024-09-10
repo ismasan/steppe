@@ -35,7 +35,8 @@ module Steppe
         # https://swagger.io/docs/specification/links/
         'operationId' => node.rel_name.to_s,
         'description' => node.description,
-        'parameters' => visit_parameters(node.params_schema),
+        'parameters' => visit_parameters(node.query_schema),
+        'requestBody' => visit_request_body(node.payload_schemas),
         'responses' => visit(node.responders)
       )
       path = path.merge(node.verb.to_s => verb)
@@ -69,10 +70,11 @@ module Steppe
       props.merge(status => status_prop)
     end
 
+    PARAMETERS_IN = %i[query path].freeze
+
     def visit_parameters(schema)
-      ins = %i[query path].freeze
       specs = schema._schema.each.with_object({}) do |(name, type), h|
-        h[name.to_s] = type if ins.include?(type.metadata[:in])
+        h[name.to_s] = type if PARAMETERS_IN.include?(type.metadata[:in])
       end
       specs.map do |name, type|
         spec = visit(type)
@@ -88,6 +90,16 @@ module Steppe
           'schema' => spec.except('in')
         }
       end
+    end
+
+    def visit_request_body(schemas)
+      return {} if schemas.empty?
+
+      content = schemas.each.with_object({}) do |(content_type, schema), h|
+        h[content_type] = { 'schema' => visit(schema) }
+      end
+
+      { 'required' => true, 'content' => content }
     end
   end
 end
