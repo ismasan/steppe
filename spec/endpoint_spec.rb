@@ -40,10 +40,10 @@ RSpec.describe Steppe::Endpoint do
   end
 
   describe '#query_schema' do
-    it 'builds #params_schema from path params' do
+    it 'builds #query_schema from path params' do
       endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id')
 
-      endpoint.params_schema.at_key(:id).tap do |field|
+      endpoint.query_schema.at_key(:id).tap do |field|
         expect(field).to be_a(Plumb::Composable)
         expect(field.metadata[:type]).to eq(String)
         expect(field.metadata[:in]).to eq(:path)
@@ -58,11 +58,11 @@ RSpec.describe Steppe::Endpoint do
         )
       end
 
-      endpoint.params_schema.at_key(:id).tap do |field|
+      endpoint.query_schema.at_key(:id).tap do |field|
         expect(field.metadata[:type]).to eq(Integer)
         expect(field.metadata[:in]).to eq(:path)
       end
-      endpoint.params_schema.at_key(:q).tap do |field|
+      endpoint.query_schema.at_key(:q).tap do |field|
         expect(field.metadata[:type]).to eq(String)
         expect(field.metadata[:in]).to eq(:query)
       end
@@ -76,18 +76,28 @@ RSpec.describe Steppe::Endpoint do
       endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
         e.step step_with_query_schema.new(Steppe::Types::Hash[max: Integer])
       end
-      expect(endpoint.params_schema.at_key(:id).metadata[:in]).to eq(:path)
-      expect(endpoint.params_schema.at_key(:max).metadata[:in]).to eq(:query)
+      expect(endpoint.query_schema.at_key(:id).metadata[:in]).to eq(:path)
+      expect(endpoint.query_schema.at_key(:max).metadata[:in]).to eq(:query)
     end
   end
 
   describe '#payload_schema' do
-    it 'adds fields to #params_schema' do
-      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
-        e.payload_schema(name: String)
+    it 'adds schemas to #payload_schemas' do
+      endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+        # Payload schemas are merged
+        e.payload_schema(
+          name: String,
+          age: Integer
+        )
+        e.payload_schema(title: String)
+        # Non-mergeable types are just replaced
+        e.payload_schema 'plain/text', Steppe::Types::String
+        e.payload_schema 'plain/text', Steppe::Types::String
       end
-      expect(endpoint.params_schema.at_key(:id).metadata[:in]).to eq(:path)
-      expect(endpoint.params_schema.at_key(:name).metadata[:in]).to eq(:body)
+      expect(endpoint.payload_schemas['application/json'].at_key(:age).metadata[:type]).to eq(Integer)
+      expect(endpoint.payload_schemas['application/json'].at_key(:name).metadata[:type]).to eq(String)
+      expect(endpoint.payload_schemas['application/json'].at_key(:title).metadata[:type]).to eq(String)
+      expect(endpoint.payload_schemas['plain/text']).to eq(Steppe::Types::String)
     end
   end
 
@@ -101,9 +111,9 @@ RSpec.describe Steppe::Endpoint do
       end
     end
 
-    context 'with invalid params' do
+    context 'with invalid request body params' do
       it 'sets status to 422 and uses built-in errors serializer' do
-        request = Rack::Request.new(Rack::MockRequest.env_for('/users/1'))
+        request = Rack::Request.new(Rack::MockRequest.env_for('/users/1', 'CONTENT_TYPE' => 'application/json'))
         allow(request).to receive(:params).and_return(name: 'Joe', age: '17')
         result = endpoint.run(request)
         expect(result.valid?).to be false
@@ -119,7 +129,8 @@ RSpec.describe Steppe::Endpoint do
 
     context 'with valid params and no explicit responder' do
       it 'uses default responder/serializer' do
-        request = Rack::Request.new(Rack::MockRequest.env_for('/users/1'))
+        # request = Rack::Request.new(Rack::MockRequest.env_for('/users/1'))
+        request = Rack::Request.new(Rack::MockRequest.env_for('/users/1', 'CONTENT_TYPE' => 'application/json'))
         allow(request).to receive(:params).and_return(name: 'Joe', age: '19')
         result = endpoint.run(request)
         expect(result.valid?).to be true

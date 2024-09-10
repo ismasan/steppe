@@ -27,17 +27,18 @@ module Steppe
       def errors = result.errors
     end
 
-    attr_reader :rel_name, :params_schema, :responders
+    attr_reader :rel_name, :payload_schemas, :responders
     attr_accessor :description
 
     def initialize(rel_name, verb, path: '/', &)
       @rel_name = rel_name
       @verb = verb
-      @path = Mustermann.new(path)
+      @path = Mustermann.new('')
       @responders = ResponderRegistry.new
-      @params_schema = Types::Hash
+      @query_schema = Types::Hash
+      @payload_schemas = {}
       @description = 'An endpoint'
-      merge_path_params_into_params_schema!
+      self.path = path
       super(&)
       # Fallback responders
       respond 200..201, 'application/json', DefaultEntitySerializer
@@ -48,20 +49,83 @@ module Steppe
 
     def node_name = :endpoint
 
-    QueryValidator = Data.define(:query_schema) do
-      def call(result) = result
+    module Utils
+      def self.deep_symbolize_keys(hash)
+        hash.each.with_object({}) do |(k, v), h|
+          value = case v
+          when Hash
+            deep_symbolize_keys(v)
+          when Array
+            v.map { |e| e.is_a?(Hash) ? deep_symbolize_keys(e) : e }
+          else
+            v
+          end
+          h[k.to_sym] = value
+        end
+      end
     end
 
-    PayloadValidator = Data.define(:payload_schema) do
-      def call(result) = result
+    class QueryValidator
+      attr_reader :query_schema
+
+      def initialize(query_schema)
+        @query_schema = query_schema.is_a?(Hash) ? Types::Hash[query_schema] : query_schema
+      end
+
+      def call(conn)
+        # TODO: handle deep symbolization in a more robust way
+        # TODO: we should only validate the request PATH and QUERY params here
+        result = query_schema.resolve(conn.request.params)
+        conn = conn.copy(params: conn.params.merge(result.value))
+        return conn if result.valid?
+
+        conn.respond_with(422).invalid(errors: result.errors)
+      end
     end
 
-    def query_schema(sc)
-      step(QueryValidator.new(sc))
+    class PayloadValidator
+      attr_reader :content_type, :payload_schema
+
+      def initialize(content_type, payload_schema)
+        @content_type = content_type
+        @payload_schema = payload_schema.is_a?(Hash) ? Types::Hash[payload_schema] : payload_schema
+      end
+
+      def call(conn)
+        return conn unless content_type == conn.request.content_type
+
+        # TODO: we should only validate the request BODY here
+        # but we want to avoid parsing the body again
+        # if an upstream framework already did it
+        result = payload_schema.resolve(conn.request.params)
+        conn = conn.copy(params: conn.params.merge(result.value))
+        return conn if result.valid?
+
+        conn.respond_with(422).invalid(errors: result.errors)
+      end
     end
 
-    def payload_schema(sc)
-      step PayloadValidator.new(sc)
+    def query_schema(sc = nil)
+      if sc
+        step(QueryValidator.new(sc))
+      else
+        @query_schema
+      end
+    end
+
+    def payload_schema(*args)
+      case args
+      in [Hash => sc]
+        step PayloadValidator.new(ContentTypes::JSON, sc)
+      in [Plumb::Composable => sc]
+        step PayloadValidator.new(ContentTypes::JSON, sc)
+      in [String => content_type, Hash => sc]
+        step PayloadValidator.new(content_type, sc)
+      in [String => content_type, Plumb::Composable => sc]
+        step PayloadValidator.new(content_type, sc)
+      else
+        raise ArgumentError, "Invalid arguments: #{args.inspect}. Expects [Hash] or [Plumb::Composable], and an optional content type."
+      end
     end
 
     def verb(vrb = nil)
@@ -119,69 +183,49 @@ module Steppe
     end
 
     def call(result)
-      result = validate_params(result)
-      result = super(result) if result.valid?
+      result = super(result)
       responder = responders.resolve(result) || FALLBACK_RESPONDER
       responder.call(result)
     end
 
     private
 
-    def validate_params(result)
-      # TODO: handle deep symbolization in a more robust way
-      params_result = @params_schema.resolve(deep_symbolize_keys(result.request.params))
-      result = result.copy(params: params_result.value)
-      return result if params_result.valid?
-
-      result.response.status = 422
-      result.invalid(errors: params_result.errors)
-    end
-
-    def deep_symbolize_keys(hash)
-      hash.each.with_object({}) do |(k, v), h|
-        value = case v
-        when Hash
-          deep_symbolize_keys(v)
-        when Array
-          v.map { |e| e.is_a?(Hash) ? deep_symbolize_keys(e) : e }
-        else
-          v
-        end
-        h[k.to_sym] = value
-      end
-    end
-
     def prepare_step(callable)
       merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)
-      merge_payload_schema(callable.payload_schema) if callable.respond_to?(:payload_schema)
+      merge_payload_schema(callable) if callable.respond_to?(:payload_schema)
       callable
     end
 
     def merge_query_schema(sc)
-      sc = sc._schema if sc.respond_to?(:_schema)
-      annotated_sc = sc.each_with_object({}) do |(k, v), h|
+      annotated_sc = sc._schema.each_with_object({}) do |(k, v), h|
         pin = @path.names.include?(k.to_s) ? :path : :query
         h[k] = Plumb::Composable.wrap(v).metadata(in: pin)
       end
-      @params_schema += annotated_sc
+      @query_schema += annotated_sc
     end
 
-    def merge_payload_schema(sc)
-      sc = sc._schema if sc.respond_to?(:_schema)
-      annotated_sc = sc.each_with_object({}) do |(k, v), h|
-        h[k] = Plumb::Composable.wrap(v).metadata(in: :body)
+    def merge_payload_schema(callable)
+      content_type = callable.respond_to?(:content_type) ? callable.content_type : ContentTypes::JSON
+
+      existing = @payload_schemas[content_type]
+      if existing && existing.respond_to?(:+)
+        existing += callable.payload_schema
+      else
+        existing = callable.payload_schema
       end
-      @params_schema += annotated_sc
+      @payload_schemas[content_type] = existing
     end
 
-    def merge_path_params_into_params_schema!
+    def path=(pt)
+      @path = Mustermann.new(pt)
       sc = @path.names.each_with_object({}) do |name, h| 
         name = name.to_sym
-        field = @params_schema.at_key(name) || Steppe::Types::String
+        field = @query_schema.at_key(name) || Steppe::Types::String
         field = field.metadata(in: :path)
         h[name] = field
       end
-      @params_schema += sc
+      @query_schema += sc
+      @path
     end
   end
 end

@@ -25,6 +25,12 @@ module Steppe
       self.class.new(value, params:, errors:, request:, response:)
     end
 
+    def respond_with(status = nil, &)
+      response.status = status if status
+      yield response if block_given?
+      self
+    end
+
     def reset(value)
       @value = value
       self
