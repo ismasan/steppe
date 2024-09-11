@@ -48,6 +48,7 @@ module Steppe
         # https://swagger.io/docs/specification/links/
         'operationId' => node.rel_name.to_s,
         'description' => node.description,
+        'tags' => node.tags,
         'parameters' => visit_parameters(node.query_schema),
         'requestBody' => visit_request_body(node.payload_schemas),
         'responses' => visit(node.responders)

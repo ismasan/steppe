@@ -104,7 +104,7 @@ module Steppe
     end
 
     attr_reader :rel_name, :payload_schemas, :responders
-    attr_accessor :description
+    attr_accessor :description, :tags
 
     def initialize(rel_name, verb, path: '/', &)
       @rel_name = rel_name
@@ -115,6 +115,7 @@ module Steppe
       @payload_schemas = {}
       @body_parsers = {}
       @description = 'An endpoint'
+      @tags = []
       self.path = path
       super(freeze_after: false, &)
 

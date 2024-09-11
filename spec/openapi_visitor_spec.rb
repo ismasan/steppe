@@ -47,6 +47,7 @@ RSpec.describe Steppe::OpenAPIVisitor do
   specify 'response body schema' do
     endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
       e.description = 'Test endpoint'
+      e.tags = %w[users]
       e.serialize do
         attribute :name, String
         attribute :email, Steppe::Types::Email
@@ -55,6 +56,7 @@ RSpec.describe Steppe::OpenAPIVisitor do
 
     data = described_class.new.visit(endpoint)
     expect(data.dig('/users', 'post', 'description')).to eq('Test endpoint')
+    expect(data.dig('/users', 'post', 'tags')).to eq(%w[users])
     expect(data.dig('/users', 'post', 'operationId')).to eq('test')
     expect(data.dig('/users', 'post', 'parameters')).to eq([])
     expect(data.dig('/users', 'post', 'responses', '2XX')).to eq({
