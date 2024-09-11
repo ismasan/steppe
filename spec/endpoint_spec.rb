@@ -13,7 +13,7 @@ RSpec.describe Steppe::Endpoint do
         id: Steppe::Types::Lax::Integer
       )
       e.step do |conn|
-        conn.valid(user_class.new(conn.request.params[:id], 'Joe'))
+        conn.valid(user_class.new(conn.params[:id], 'Joe'))
       end
 
       # Compact syntax. Registers a responder
@@ -31,12 +31,11 @@ RSpec.describe Steppe::Endpoint do
     now = Time.now
     allow(Time).to receive(:now).and_return(now)
 
-    request = Rack::Request.new(Rack::MockRequest.env_for('/users/1', 'CONTENT_TYPE' => 'application/json'))
-    allow(request).to receive(:params).and_return(id: '1')
+    request = build_request('/users/1', query: { id: '1' })
     result = endpoint.run(request)
     expect(result.response.status).to eq(200)
     expect(result.response.content_type).to eq('application/json')
-    expect(JSON.parse(result.response.body)).to eq('requested_at' => now.iso8601, 'id' => '1', 'name' => 'Joe')
+    expect(JSON.parse(result.response.body)).to eq('requested_at' => now.iso8601, 'id' => 1, 'name' => 'Joe')
   end
 
   describe '#query_schema' do
@@ -91,17 +90,43 @@ RSpec.describe Steppe::Endpoint do
         )
         e.payload_schema(title: String)
         # Non-mergeable types are just replaced
-        e.payload_schema 'plain/text', Steppe::Types::String
-        e.payload_schema 'plain/text', Steppe::Types::String
+        e.payload_schema 'text/plain', Steppe::Types::String
+        e.payload_schema 'text/plain', Steppe::Types::String
       end
       expect(endpoint.payload_schemas['application/json'].at_key(:age).metadata[:type]).to eq(Integer)
       expect(endpoint.payload_schemas['application/json'].at_key(:name).metadata[:type]).to eq(String)
       expect(endpoint.payload_schemas['application/json'].at_key(:title).metadata[:type]).to eq(String)
-      expect(endpoint.payload_schemas['plain/text']).to eq(Steppe::Types::String)
+      expect(endpoint.payload_schemas['text/plain']).to eq(Steppe::Types::String)
     end
   end
 
-  describe 'validating params' do
+  describe 'validating query params' do
+    subject(:endpoint) do
+      Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+        e.query_schema(
+          id: Steppe::Types::String[/^user-/],
+          age?: Steppe::Types::Lax::Integer[18..]
+        )
+      end
+    end
+
+    context 'with invalid query or path params' do
+      it 'sets status to 422 and uses built-in errors serializer' do
+        request = build_request('/users/1', query: { id: '1', age: '19' })
+        result = endpoint.run(request)
+        expect(result.valid?).to be false
+        expect(result.response.status).to eq(422)
+        expect(result.response.content_type).to eq('application/json')
+        expect(JSON.parse(result.response.body)).to eq(
+          'http' => { 'status' => 422 },
+          'params' => { 'id' => '1', 'age' => 19 },
+          'errors' => { 'id' => 'Must match /^user-/' }
+        )
+      end
+    end
+  end
+
+  describe 'validating payload params' do
     subject(:endpoint) do
       Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
         e.payload_schema(
@@ -113,8 +138,7 @@ RSpec.describe Steppe::Endpoint do
 
     context 'with invalid request body params' do
       it 'sets status to 422 and uses built-in errors serializer' do
-        request = Rack::Request.new(Rack::MockRequest.env_for('/users/1', 'CONTENT_TYPE' => 'application/json'))
-        allow(request).to receive(:params).and_return(name: 'Joe', age: '17')
+        request = build_request('/users/1', query: { id: '1' }, body: '{"name": "Joe", "age": "17"}')
         result = endpoint.run(request)
         expect(result.valid?).to be false
         expect(result.response.status).to eq(422)
@@ -129,9 +153,7 @@ RSpec.describe Steppe::Endpoint do
 
     context 'with valid params and no explicit responder' do
       it 'uses default responder/serializer' do
-        # request = Rack::Request.new(Rack::MockRequest.env_for('/users/1'))
-        request = Rack::Request.new(Rack::MockRequest.env_for('/users/1', 'CONTENT_TYPE' => 'application/json'))
-        allow(request).to receive(:params).and_return(name: 'Joe', age: '19')
+        request = build_request('/users/1', body: '{"name": "Joe", "age": "19"}')
         result = endpoint.run(request)
         expect(result.valid?).to be true
         expect(result.response.status).to eq(200)
@@ -142,5 +164,16 @@ RSpec.describe Steppe::Endpoint do
         )
       end
     end
+  end
+
+  private
+
+  def build_request(path, query: {}, body: nil, content_type: 'application/json')
+    Steppe::Request.new(Rack::MockRequest.env_for(
+                          path,
+                          'CONTENT_TYPE' => content_type,
+                          'action_dispatch.request.path_parameters' => query,
+                          Rack::RACK_INPUT => body ? StringIO.new(body) : nil
+                        ))
   end
 end

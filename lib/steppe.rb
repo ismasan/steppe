@@ -22,11 +22,13 @@ module Steppe
 
   module ContentTypes
     JSON = 'application/json'
+    TEXT = 'text/plain'
   end
 
   JSON_MIME = MIME::Type.new(ContentTypes::JSON).freeze
 end
 
+require_relative 'steppe/request'
 require_relative 'steppe/responder'
 require_relative 'steppe/service'
 require_relative 'steppe/endpoint'

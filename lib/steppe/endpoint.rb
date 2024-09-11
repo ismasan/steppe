@@ -27,44 +27,6 @@ module Steppe
       def errors = result.errors
     end
 
-    attr_reader :rel_name, :payload_schemas, :responders
-    attr_accessor :description
-
-    def initialize(rel_name, verb, path: '/', &)
-      @rel_name = rel_name
-      @verb = verb
-      @path = Mustermann.new('')
-      @responders = ResponderRegistry.new
-      @query_schema = Types::Hash
-      @payload_schemas = {}
-      @description = 'An endpoint'
-      self.path = path
-      super(&)
-      # Fallback responders
-      respond 200..201, 'application/json', DefaultEntitySerializer
-      respond 204, 'application/json', BLANK_JSON_OBJECT
-      respond 404, 'application/json', DefaultEntitySerializer
-      respond 422, 'application/json', DefaultEntitySerializer
-    end
-
-    def node_name = :endpoint
-
-    module Utils
-      def self.deep_symbolize_keys(hash)
-        hash.each.with_object({}) do |(k, v), h|
-          value = case v
-          when Hash
-            deep_symbolize_keys(v)
-          when Array
-            v.map { |e| e.is_a?(Hash) ? deep_symbolize_keys(e) : e }
-          else
-            v
-          end
-          h[k.to_sym] = value
-        end
-      end
-    end
-
     class QueryValidator
       attr_reader :query_schema
 
@@ -73,9 +35,7 @@ module Steppe
       end
 
       def call(conn)
-        # TODO: handle deep symbolization in a more robust way
-        # TODO: we should only validate the request PATH and QUERY params here
-        result = query_schema.resolve(conn.request.params)
+        result = query_schema.resolve(conn.request.steppe_url_params)
         conn = conn.copy(params: conn.params.merge(result.value))
         return conn if result.valid?
 
@@ -94,16 +54,79 @@ module Steppe
       def call(conn)
         return conn unless content_type == conn.request.content_type
 
-        # TODO: we should only validate the request BODY here
-        # but we want to avoid parsing the body again
-        # if an upstream framework already did it
-        result = payload_schema.resolve(conn.request.params)
+        result = payload_schema.resolve(conn.request.body)
         conn = conn.copy(params: conn.params.merge(result.value))
         return conn if result.valid?
 
         conn.respond_with(422).invalid(errors: result.errors)
       end
     end
+
+    class BodyParser
+      MissingParserError = Class.new(ArgumentError)
+
+      include Plumb::Composable
+
+      def self.parsers
+        @parsers ||= {}
+      end
+
+      parsers[ContentTypes::JSON] = proc do |body|
+        ::JSON.parse(body.read, symbolize_names: true)
+      end
+
+      parsers[ContentTypes::TEXT] = proc do |body|
+        body.read
+      end
+
+      def self.build(content_type)
+        parser = parsers[content_type]
+        raise MissingParserError, "No parser for content type: #{content_type}" unless parser
+
+        new(content_type, parser)
+      end
+
+      def initialize(content_type, parser)
+        @content_type = content_type
+        @parser = parser
+      end
+
+      def call(conn)
+        if conn.request.body
+          body = @parser.call(conn.request.body)
+          request = Rack::Request.new(conn.request.env.merge(::Rack::RACK_INPUT => body))
+          return conn.copy(request:)
+        end
+        conn
+      rescue StandardError => e
+        conn.respond_with(400).invalid(errors: { body: e.message })
+      end
+    end
+
+    attr_reader :rel_name, :payload_schemas, :responders
+    attr_accessor :description
+
+    def initialize(rel_name, verb, path: '/', &)
+      @rel_name = rel_name
+      @verb = verb
+      @path = Mustermann.new('')
+      @responders = ResponderRegistry.new
+      @query_schema = Types::Hash
+      @payload_schemas = {}
+      @body_parsers = {}
+      @description = 'An endpoint'
+      self.path = path
+      super(freeze_after: false, &)
+
+      # Fallback responders
+      respond 200..201, 'application/json', DefaultEntitySerializer
+      respond 204, 'application/json', BLANK_JSON_OBJECT
+      respond 404, 'application/json', DefaultEntitySerializer
+      respond 422, 'application/json', DefaultEntitySerializer
+      freeze
+    end
+
+    def node_name = :endpoint
 
     def query_schema(sc = nil)
       if sc
@@ -114,18 +137,24 @@ module Steppe
     end
 
     def payload_schema(*args)
-      case args
+      ctype, stp = case args
       in [Hash => sc]
-        step PayloadValidator.new(ContentTypes::JSON, sc)
+        [ContentTypes::JSON, sc]
       in [Plumb::Composable => sc]
-        step PayloadValidator.new(ContentTypes::JSON, sc)
+        [ContentTypes::JSON, sc]
       in [String => content_type, Hash => sc]
-        step PayloadValidator.new(content_type, sc)
+        [content_type, sc]
       in [String => content_type, Plumb::Composable => sc]
-        step PayloadValidator.new(content_type, sc)
+        [content_type, sc]
       else
         raise ArgumentError, "Invalid arguments: #{args.inspect}. Expects [Hash] or [Plumb::Composable], and an optional content type."
       end
+
+      unless @body_parsers[ctype]
+        step BodyParser.build(ctype)
+        @body_parsers[ctype] = true
+      end
+      step PayloadValidator.new(ctype, stp)
     end
 
     def verb(vrb = nil)
@@ -170,6 +199,13 @@ module Steppe
         raise ArgumentError, "Invalid arguments: #{args.inspect}"
       end
       self
+    end
+
+    def debug!
+      step do |conn|
+        debugger
+        conn
+      end
     end
 
     def to_rack
