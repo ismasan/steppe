@@ -35,7 +35,7 @@ RSpec.describe Steppe::Endpoint do
     result = endpoint.run(request)
     expect(result.response.status).to eq(200)
     expect(result.response.content_type).to eq('application/json')
-    expect(JSON.parse(result.response.body)).to eq('requested_at' => now.iso8601, 'id' => 1, 'name' => 'Joe')
+    expect(parse_body(result.response)).to eq(requested_at: now.iso8601, id: 1, name: 'Joe')
   end
 
   describe '#query_schema' do
@@ -117,10 +117,10 @@ RSpec.describe Steppe::Endpoint do
         expect(result.valid?).to be false
         expect(result.response.status).to eq(422)
         expect(result.response.content_type).to eq('application/json')
-        expect(JSON.parse(result.response.body)).to eq(
-          'http' => { 'status' => 422 },
-          'params' => { 'id' => '1', 'age' => 19 },
-          'errors' => { 'id' => 'Must match /^user-/' }
+        expect(parse_body(result.response)).to eq(
+          http: { status: 422 },
+          params: { id: '1', age: 19 },
+          errors: { id: 'Must match /^user-/' }
         )
       end
     end
@@ -143,10 +143,10 @@ RSpec.describe Steppe::Endpoint do
         expect(result.valid?).to be false
         expect(result.response.status).to eq(422)
         expect(result.response.content_type).to eq('application/json')
-        expect(JSON.parse(result.response.body)).to eq(
-          'http' => { 'status' => 422 },
-          'params' => { 'name' => 'Joe', 'age' => 17 },
-          'errors' => { 'age' => 'Must be within 18..' }
+        expect(parse_body(result.response)).to eq(
+          http: { status: 422 },
+          params: { name: 'Joe', age: 17 },
+          errors: { age: 'Must be within 18..' }
         )
       end
     end
@@ -157,10 +157,10 @@ RSpec.describe Steppe::Endpoint do
         result = endpoint.run(request)
         expect(result.valid?).to be true
         expect(result.response.status).to eq(200)
-        expect(JSON.parse(result.response.body)).to eq(
-          'http' => { 'status' => 200 },
-          'params' => { 'name' => 'Joe', 'age' => 19 },
-          'errors' => {}
+        expect(parse_body(result.response)).to eq(
+          http: { status: 200 },
+          params: { name: 'Joe', age: 19 },
+          errors: {}
         )
       end
     end
@@ -175,5 +175,9 @@ RSpec.describe Steppe::Endpoint do
                           'action_dispatch.request.path_parameters' => query,
                           Rack::RACK_INPUT => body ? StringIO.new(body) : nil
                         ))
+  end
+
+  def parse_body(response)
+    JSON.parse(response.body.first, symbolize_names: true)
   end
 end

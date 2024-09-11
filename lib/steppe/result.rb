@@ -27,7 +27,7 @@ module Steppe
 
     def respond_with(status = nil, &)
       response.status = status if status
-      yield response if block_given?
+      @response = yield(response) if block_given?
       self
     end
 

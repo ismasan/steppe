@@ -32,15 +32,17 @@ module Steppe
       accepts == accept_header
     end
 
-    def call(result)
-      result = super(result)
+    def call(conn)
+      conn = super(conn)
       # Format the response body
       # TODO: this should do content negotiation
       # ie check the request's Accept header
       # for now we assume JSON
-      result.response['Content-Type'] = 'application/json'
-      result.response.body = JSON.dump(result.value)
-      result
+      body = JSON.dump(conn.value)
+      conn = conn.respond_with(conn.response.status) do |response|
+        response[Rack::CONTENT_TYPE] = ContentTypes::JSON
+        Rack::Response.new(body, response.status, response.headers)
+      end
     end
   end
 end
