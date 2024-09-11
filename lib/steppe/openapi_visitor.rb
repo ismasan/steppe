@@ -21,7 +21,7 @@ module Steppe
           'version' => node.version
         },
         'servers' => [],
-        'paths' => node.endpoints.values.reduce({}) { |memo, e| visit(e, memo) }
+        'paths' => node.endpoints.reduce({}) { |memo, e| visit(e, memo) }
       )
     end
 

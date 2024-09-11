@@ -79,6 +79,44 @@ RSpec.describe Steppe::OpenAPIVisitor do
                                                                  })
   end
 
+  describe 'Steppe::Service' do
+    subject(:service) do
+      Steppe::Service.new do |s|
+        s.title = 'Users'
+        s.description = 'Users service'
+        s.version = '1.0.0'
+
+        s.get :users, '/users' do |e|
+          e.description = 'List users'
+        end
+
+        s.post :create_user, '/users' do |e|
+          e.description = 'Create user'
+        end
+
+        s.put :update_user, '/users/:id' do |e|
+          e.description = 'Update user'
+        end
+
+        s.patch :patch_user, '/users/:id' do |e|
+          e.description = 'Patch user'
+        end
+
+        s.delete :delete_user, '/users/:id' do |e|
+          e.description = 'Delete user'
+        end
+      end
+    end
+
+    specify do
+      data = described_class.call(service)
+      expect(data['openapi']).to eq('3.0.0')
+      expect(data['info']['title']).to eq('Users')
+      expect(data['info']['description']).to eq('Users service')
+      expect(data['info']['version']).to eq('1.0.0')
+    end
+  end
+
   def pluck(array, key)
     array.map { |h| h[key] }
   end
