@@ -114,7 +114,7 @@ RSpec.describe Steppe::Endpoint do
       it 'sets status to 422 and uses built-in errors serializer' do
         request = build_request('/users/1', query: { id: '1', age: '19' })
         result = endpoint.run(request)
-        expect(result.valid?).to be false
+        expect(result.errors.any?).to be true
         expect(result.response.status).to eq(422)
         expect(result.response.content_type).to eq('application/json')
         expect(parse_body(result.response)).to eq(
@@ -140,7 +140,6 @@ RSpec.describe Steppe::Endpoint do
       it 'sets status to 422 and uses built-in errors serializer' do
         request = build_request('/users/1', query: { id: '1' }, body: '{"name": "Joe", "age": "17"}')
         result = endpoint.run(request)
-        expect(result.valid?).to be false
         expect(result.response.status).to eq(422)
         expect(result.response.content_type).to eq('application/json')
         expect(parse_body(result.response)).to eq(
@@ -164,6 +163,32 @@ RSpec.describe Steppe::Endpoint do
         )
       end
     end
+  end
+
+  specify 'full responder API with halted conn' do
+    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+      e.step do |conn|
+        conn.invalid(errors: { name: 'is invalid' })
+      end
+
+      e.respond(200) do |r|
+        r.step do |conn|
+          conn.valid(user_class.new(1, 'Joe'))
+        end
+        r.serialize do
+          attribute :id, Integer
+          attribute :name, String
+        end
+      end
+    end
+
+    request = build_request('/users')
+    result = endpoint.run(request)
+    expect(result.response.status).to eq(200)
+    expect(parse_body(result.response)).to eq(
+      id: 1,
+      name: 'Joe'
+    )
   end
 
   private

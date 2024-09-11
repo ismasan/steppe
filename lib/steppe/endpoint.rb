@@ -219,10 +219,13 @@ module Steppe
       call(result)
     end
 
-    def call(result)
-      result = super(result)
-      responder = responders.resolve(result) || FALLBACK_RESPONDER
-      responder.call(result)
+    def call(conn)
+      conn = super(conn)
+      responder = responders.resolve(conn) || FALLBACK_RESPONDER
+      # Conn might be a Halt now, because a step halted processing.
+      # We set it back to Continue so that the responder pipeline
+      # can process it through its steps.
+      responder.call(conn.valid)
     end
 
     private
