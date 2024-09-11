@@ -86,6 +86,8 @@ RSpec.describe Steppe::OpenAPIVisitor do
         s.description = 'Users service'
         s.version = '1.0.0'
 
+        s.server(url: 'http://example.com', description: 'Production server')
+
         s.get :users, '/users' do |e|
           e.description = 'List users'
         end
@@ -114,6 +116,8 @@ RSpec.describe Steppe::OpenAPIVisitor do
       expect(data['info']['title']).to eq('Users')
       expect(data['info']['description']).to eq('Users service')
       expect(data['info']['version']).to eq('1.0.0')
+      expect(data['servers'][0]['url']).to eq('http://example.com')
+      expect(data['servers'][0]['description']).to eq('Production server')
     end
   end
 

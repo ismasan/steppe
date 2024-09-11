@@ -20,9 +20,13 @@ module Steppe
           'description' => node.description,
           'version' => node.version
         },
-        'servers' => [],
+        'servers' => node.servers.map { |s| visit(s) },
         'paths' => node.endpoints.reduce({}) { |memo, e| visit(e, memo) }
       )
+    end
+
+    on(:server) do |node, _props|
+      { 'url' => node.url.to_s, 'description' => node.description }
     end
 
     on(:endpoint) do |node, paths|
