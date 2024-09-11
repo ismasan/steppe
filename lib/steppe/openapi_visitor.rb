@@ -13,6 +13,15 @@ module Steppe
       ENVELOPE.merge(data)
     end
 
+    def self.from_request(service, request)
+      data = call(service)
+      url = request.base_url.to_s
+      return data if data['servers'].any? { |s| s['url'] == url }
+
+      data['servers'] << { 'url' => url, 'description' => 'Current server' }
+      data
+    end
+
     on(:service) do |node, props|
       props.merge(
         'info' => {
