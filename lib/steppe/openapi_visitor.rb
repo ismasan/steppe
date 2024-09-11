@@ -30,12 +30,19 @@ module Steppe
           'version' => node.version
         },
         'servers' => node.servers.map { |s| visit(s) },
+        'tags' => node.tags.map { |s| visit(s) },
         'paths' => node.endpoints.reduce({}) { |memo, e| visit(e, memo) }
       )
     end
 
     on(:server) do |node, _props|
       { 'url' => node.url.to_s, 'description' => node.description }
+    end
+
+    on(:tag) do |node, _props|
+      prop = { 'name' => node.name, 'description' => node.description }
+      prop['externalDocs'] = { 'url' => node.external_docs.to_s } if node.external_docs
+      prop
     end
 
     on(:endpoint) do |node, paths|

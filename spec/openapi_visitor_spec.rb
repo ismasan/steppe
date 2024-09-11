@@ -87,6 +87,11 @@ RSpec.describe Steppe::OpenAPIVisitor do
         s.title = 'Users'
         s.description = 'Users service'
         s.version = '1.0.0'
+        s.tag(
+          'users',
+          description: 'Users operations',
+          external_docs: 'https://example.com/docs/users'
+        )
 
         s.server(url: 'http://example.com', description: 'Production server')
 
@@ -120,6 +125,9 @@ RSpec.describe Steppe::OpenAPIVisitor do
       expect(data['info']['version']).to eq('1.0.0')
       expect(data['servers'][0]['url']).to eq('http://example.com')
       expect(data['servers'][0]['description']).to eq('Production server')
+      expect(data['tags'][0]['name']).to eq('users')
+      expect(data['tags'][0]['description']).to eq('Users operations')
+      expect(data['tags'][0]['externalDocs']['url']).to eq('https://example.com/docs/users')
     end
   end
 
