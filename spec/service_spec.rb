@@ -4,28 +4,28 @@ require 'rack'
 
 RSpec.describe Steppe::Service do
   subject(:service) do
-    described_class.new do |s|
-      s.title = 'Users'
-      s.description = 'Users service'
-      s.version = '1.0.0'
+    described_class.new do |api|
+      api.title = 'Users'
+      api.description = 'Users service'
+      api.version = '1.0.0'
 
-      s.get :users, '/users' do |e|
+      api.get :users, '/users' do |e|
         e.description = 'List users'
       end
 
-      s.post :create_user, '/users' do |e|
+      api.post :create_user, '/users' do |e|
         e.description = 'Create user'
       end
 
-      s.put :update_user, '/users/:id' do |e|
+      api.put :update_user, '/users/:id' do |e|
         e.description = 'Update user'
       end
 
-      s.patch :patch_user, '/users/:id' do |e|
+      api.patch :patch_user, '/users/:id' do |e|
         e.description = 'Patch user'
       end
 
-      s.delete :delete_user, '/users/:id' do |e|
+      api.delete :delete_user, '/users/:id' do |e|
         e.description = 'Delete user'
       end
     end
