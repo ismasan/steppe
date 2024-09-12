@@ -38,9 +38,9 @@ module Steppe
       # TODO: this should do content negotiation
       # ie check the request's Accept header
       # for now we assume JSON
-      body = JSON.dump(conn.value)
       conn = conn.respond_with(conn.response.status) do |response|
         response[Rack::CONTENT_TYPE] = ContentTypes::JSON
+        body = conn.value.nil? ? nil : JSON.dump(conn.value)
         Rack::Response.new(body, response.status, response.headers)
       end
     end

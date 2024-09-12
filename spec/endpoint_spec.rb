@@ -191,6 +191,32 @@ RSpec.describe Steppe::Endpoint do
     )
   end
 
+  specify 'default response for 204 no content' do
+    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+      e.step do |conn|
+        conn.respond_with(204)
+      end
+    end
+
+    request = build_request('/users')
+    result = endpoint.run(request)
+    expect(result.response.status).to eq(204)
+    expect(result.response.body).to eq([])
+  end
+
+  specify 'default response for 304 not modified' do
+    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+      e.step do |conn|
+        conn.respond_with(304)
+      end
+    end
+
+    request = build_request('/users')
+    result = endpoint.run(request)
+    expect(result.response.status).to eq(304)
+    expect(result.response.body).to eq([])
+  end
+
   private
 
   def build_request(path, query: {}, body: nil, content_type: 'application/json')

@@ -8,8 +8,6 @@ require 'steppe/result'
 
 module Steppe
   class Endpoint < Plumb::Pipeline
-    BLANK_JSON_OBJECT = Types::Static[{}.freeze]
-
     FALLBACK_RESPONDER = Responder.new(statuses: (100..599), accepts: 'application/json') do |r|
       r.serialize do
         attribute :message, String
@@ -121,7 +119,10 @@ module Steppe
 
       # Fallback responders
       respond 200..201, 'application/json', DefaultEntitySerializer
-      respond 204, 'application/json', BLANK_JSON_OBJECT
+      respond 204, 'application/json'
+      # TODO: match any content type
+      # respond 304, '*/*'
+      respond 304, 'application/json'
       respond 404, 'application/json', DefaultEntitySerializer
       respond 422, 'application/json', DefaultEntitySerializer
       freeze
@@ -182,6 +183,10 @@ module Steppe
 
     def respond(*args, &)
       case args
+      in [Integer => status] unless block_given?
+        @responders << Responder.new(statuses: (status..status))
+      in [Integer => status, String => accepts] unless block_given?
+        @responders << Responder.new(statuses: status, accepts:)
       in [Integer => status] if block_given?
         @responders << Responder.new(statuses: (status..status), &)
       in [Integer => status, String => accepts] if block_given?
