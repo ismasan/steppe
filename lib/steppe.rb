@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'plumb'
-require 'mime/types'
 
 require_relative 'steppe/version'
 
@@ -24,8 +23,6 @@ module Steppe
     JSON = 'application/json'
     TEXT = 'text/plain'
   end
-
-  JSON_MIME = MIME::Type.new(ContentTypes::JSON).freeze
 end
 
 require_relative 'steppe/request'
