@@ -10,8 +10,10 @@ module Steppe
         parse(object)
       end
 
-      def __plumb_define_attribute_method__(name)
-        define_method(name) { object.send(name) }
+      def __plumb_define_attribute_reader_method__(name)
+        class_eval <<~RUBY, __FILE__, __LINE__ + 1
+        def #{name} = @object.#{name}
+        RUBY
       end
 
       def call(result)
