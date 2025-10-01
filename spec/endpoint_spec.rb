@@ -221,11 +221,11 @@ RSpec.describe Steppe::Endpoint do
 
   def build_request(path, query: {}, body: nil, content_type: 'application/json')
     Steppe::Request.new(Rack::MockRequest.env_for(
-                          path,
-                          'CONTENT_TYPE' => content_type,
-                          'action_dispatch.request.path_parameters' => query,
-                          Rack::RACK_INPUT => body ? StringIO.new(body) : nil
-                        ))
+      path,
+      'CONTENT_TYPE' => content_type,
+      'action_dispatch.request.path_parameters' => query,
+      Rack::RACK_INPUT => body ? StringIO.new(body) : nil
+    ))
   end
 
   def parse_body(response)

@@ -33,15 +33,16 @@ RSpec.describe Steppe::OpenAPIVisitor do
         email: Steppe::Types::Email.desc('user email')
       )
     end
+
     data = described_class.new.visit(endpoint)
     expect(data.dig('/users', 'post', 'requestBody', 'required')).to be(true)
     expect(data.dig('/users', 'post', 'requestBody', 'content', 'application/json')).to eq({
-                                                                                             'schema' => {
-                                                                                               'properties' => { 'email' => { 'description' => 'user email', 'format' => 'email', 'type' => 'string' },
-                                                                                                                 'name' => { 'description' => 'user name',
-                                                                                                                             'type' => 'string' } }, 'required' => %w[name email], 'type' => 'object'
-                                                                                             }
-                                                                                           })
+      'schema' => {
+        'properties' => { 'email' => { 'description' => 'user email', 'format' => 'email', 'type' => 'string' },
+          'name' => { 'description' => 'user name',
+            'type' => 'string' } }, 'required' => %w[name email], 'type' => 'object'
+      }
+    })
   end
 
   specify 'response body schema' do
