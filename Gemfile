@@ -11,3 +11,10 @@ gem 'debug'
 gem 'plumb', path: '../plumb'
 gem 'rack-test', '>= 2.1'
 gem 'rspec', '~> 3.0'
+
+group :examples do
+  gem 'puma'
+  gem 'rack-cors'
+  gem 'rackup'
+  gem 'sinatra'
+end
