@@ -5,6 +5,7 @@ require 'json'
 module Steppe
   class Responder < Plumb::Pipeline
     DEFAULT_STATUSES = (200..200).freeze
+    DEFAULT_SERIALIZER = Types::Static[{}.freeze].freeze
 
     attr_reader :statuses, :accepts, :serializer
     attr_accessor :description
@@ -13,7 +14,7 @@ module Steppe
       @statuses = statuses.is_a?(Range) ? statuses : (statuses..statuses)
       @description = nil
       @accepts = accepts
-      @serializer = Types::Static[{}.freeze]
+      @serializer = DEFAULT_SERIALIZER
       super(&)
     end
 
