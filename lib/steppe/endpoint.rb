@@ -118,13 +118,13 @@ module Steppe
       super(freeze_after: false, &)
 
       # Fallback responders
-      respond 200..201, 'application/json', DefaultEntitySerializer
-      respond 204, 'application/json'
+      respond 200..201, ContentTypes::JSON, DefaultEntitySerializer
+      respond 204, ContentTypes::JSON
       # TODO: match any content type
       # respond 304, '*/*'
-      respond 304, 'application/json'
-      respond 404, 'application/json', DefaultEntitySerializer
-      respond 422, 'application/json', DefaultEntitySerializer
+      respond 304, ContentTypes::JSON
+      respond 404, ContentTypes::JSON, DefaultEntitySerializer
+      respond 422, ContentTypes::JSON, DefaultEntitySerializer
       freeze
     end
 
