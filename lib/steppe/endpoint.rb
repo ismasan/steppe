@@ -184,11 +184,11 @@ module Steppe
     def respond(*args, &)
       case args
       in [Integer => status] unless block_given?
-        @responders << Responder.new(statuses: (status..status))
+        @responders << Responder.new(statuses: status)
       in [Integer => status, String => accepts] unless block_given?
         @responders << Responder.new(statuses: status, accepts:)
       in [Integer => status] if block_given?
-        @responders << Responder.new(statuses: (status..status), &)
+        @responders << Responder.new(statuses: status, &)
       in [Integer => status, String => accepts] if block_given?
         @responders << Responder.new(statuses: status, accepts:, &)
       in [Integer => status, String => accepts, Plumb::Composable => serializer]
