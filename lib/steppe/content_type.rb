@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'rack/mime'
+
 module Steppe
   class ContentType < Data.define(:type, :subtype, :params)
     TOKEN = /[!#$%&'*+\-.^_`|~0-9A-Z]+/i
@@ -9,6 +11,10 @@ module Steppe
 
     def self.parse(str)
       return str if str.is_a?(ContentType)
+
+      if str.is_a?(Symbol)
+        str = Rack::Mime.mime_type(".#{str}")
+      end
 
       m = MIME_TYPE.match(str) or
       raise ArgumentError, "invalid content type: #{str.inspect}"

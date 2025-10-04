@@ -19,6 +19,16 @@ RSpec.describe Steppe::ContentType do
       expect(ct.quality).to eq(0.5)
     end
 
+    it 'builds from type symbol' do
+      ct = described_class.parse(:json)
+      expect(ct.type).to eq('application')
+      expect(ct.subtype).to eq('json')
+
+      ct = described_class.parse(:html)
+      expect(ct.type).to eq('text')
+      expect(ct.subtype).to eq('html')
+    end
+
     specify '#==' do
       ct1 = described_class.parse('application/json; version=1.0')
       ct2 = described_class.parse('application/json; version=1.0')
