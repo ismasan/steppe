@@ -32,8 +32,8 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Uncomment to register a new dependency of your gem
-  spec.add_dependency 'mime-types', '>= 3.0'
   spec.add_dependency 'mustermann'
+  spec.add_dependency 'papercraft'
   spec.add_dependency 'mustermann-contrib'
   spec.add_dependency 'plumb'
   spec.add_dependency 'rack', '>= 3.0'

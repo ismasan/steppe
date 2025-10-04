@@ -14,11 +14,11 @@ module Steppe
     end
 
     inline_serializers[:json] = proc do |block|
-      Class.new(Serializer, &block)
+      block.is_a?(Proc) ? Class.new(Serializer, &block) : block
     end
 
     inline_serializers[:html] = proc do |block|
-      PapercraftSerializer.new(block)
+      block.is_a?(Proc) ? PapercraftSerializer.new(block) : block
     end
 
     attr_reader :statuses, :accepts, :content_type, :serializer
@@ -35,12 +35,8 @@ module Steppe
     end
 
     def serialize(serializer = nil, &block)
-      @serializer = if serializer.nil?
-        builder = self.class.inline_serializers.fetch(@content_type_subtype)
-        builder.call(block)
-      else
-        serializer
-      end
+      builder = self.class.inline_serializers.fetch(@content_type_subtype)
+      @serializer = builder.call(serializer || block)
 
       step @serializer
     end
