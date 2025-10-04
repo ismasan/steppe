@@ -1,7 +1,17 @@
+GIT
+  remote: https://github.com/digital-fabric/papercraft.git
+  revision: ece4ea47e364ce650606ff47b88348f9ec871aa4
+  specs:
+    papercraft (2.16)
+      kramdown (~> 2.5.1)
+      kramdown-parser-gfm (~> 1.1.0)
+      rouge (~> 4.5.1)
+      sirop (~> 0.9)
+
 PATH
   remote: ../plumb
   specs:
-    plumb (0.0.13)
+    plumb (0.0.14)
       bigdecimal
       concurrent-ruby
 
@@ -9,9 +19,9 @@ PATH
   remote: .
   specs:
     steppe (0.1.0)
-      mime-types (>= 3.0)
       mustermann
       mustermann-contrib
+      papercraft
       plumb
       rack (>= 3.0)
 
@@ -33,11 +43,11 @@ GEM
       pp (>= 0.6.0)
       rdoc (>= 4.0.0)
       reline (>= 0.4.2)
+    kramdown (2.5.1)
+      rexml (>= 3.3.9)
+    kramdown-parser-gfm (1.1.0)
+      kramdown (~> 2.0)
     logger (1.7.0)
-    mime-types (3.7.0)
-      logger
-      mime-types-data (~> 3.2025, >= 3.2025.0507)
-    mime-types-data (3.2025.0924)
     mustermann (3.0.4)
       ruby2_keywords (~> 0.0.1)
     mustermann-contrib (3.0.4)
@@ -47,6 +57,7 @@ GEM
     pp (0.6.2)
       prettyprint
     prettyprint (0.2.0)
+    prism (1.4.0)
     psych (5.2.6)
       date
       stringio
@@ -73,6 +84,8 @@ GEM
       psych (>= 4.0.0)
     reline (0.6.2)
       io-console (~> 0.5)
+    rexml (3.4.4)
+    rouge (4.5.2)
     rspec (3.13.1)
       rspec-core (~> 3.13.0)
       rspec-expectations (~> 3.13.0)
@@ -94,6 +107,8 @@ GEM
       rack-protection (= 4.1.1)
       rack-session (>= 2.0.0, < 3)
       tilt (~> 2.0)
+    sirop (0.9)
+      prism (~> 1.4.0)
     stringio (3.1.7)
     tilt (2.6.1)
 
@@ -103,6 +118,7 @@ PLATFORMS
 
 DEPENDENCIES
   debug
+  papercraft!
   plumb!
   puma
   rack-cors

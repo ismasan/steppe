@@ -11,6 +11,7 @@ gem 'debug'
 gem 'plumb', path: '../plumb'
 gem 'rack-test', '>= 2.1'
 gem 'rspec', '~> 3.0'
+gem 'papercraft', github: 'digital-fabric/papercraft'
 
 group :examples do
   gem 'puma'

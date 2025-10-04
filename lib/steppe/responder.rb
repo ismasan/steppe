@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'steppe/content_type'
+require 'steppe/serializer'
+require 'steppe/papercraft_serializer'
 
 module Steppe
   class Responder < Plumb::Pipeline
@@ -13,6 +15,10 @@ module Steppe
 
     inline_serializers[:json] = proc do |block|
       Class.new(Serializer, &block)
+    end
+
+    inline_serializers[:html] = proc do |block|
+      PapercraftSerializer.new(block)
     end
 
     attr_reader :statuses, :accepts, :content_type, :serializer
