@@ -1,11 +1,7 @@
 # frozen_string_literal: true
 
 module Steppe
-  class ContentType < Data.define(:type, :subtype, :params, :type_key, :subtype_key)
-    def self.new(type, subtype, params = {})
-      super(type, subtype, params.freeze, type, "#{type}/#{subtype}")
-    end
-
+  class ContentType < Data.define(:type, :subtype, :params)
     TOKEN = /[!#$%&'*+\-.^_`|~0-9A-Z]+/i
     MIME_TYPE = /(?<type>#{TOKEN})\/(?<subtype>#{TOKEN})/
     QUOTED_STRING = /"(?:\\.|[^"\\])*"/

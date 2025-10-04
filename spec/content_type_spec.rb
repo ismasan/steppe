@@ -9,8 +9,6 @@ RSpec.describe Steppe::ContentType do
       ct = described_class.parse('application/json; version=1.0')
       expect(ct.type).to eq('application')
       expect(ct.subtype).to eq('json')
-      expect(ct.type_key).to eq('application')
-      expect(ct.subtype_key).to eq('application/json')
       expect(ct.params).to eq('version' => '1.0')
       expect(ct.quality).to eq(1.0)
       expect(ct.to_s).to eq('application/json; version=1.0')
