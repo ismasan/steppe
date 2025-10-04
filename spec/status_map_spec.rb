@@ -11,13 +11,16 @@ RSpec.describe Steppe::StatusMap do
 
     lookup << Responder.new("Success", 200..299)
     lookup << Responder.new("Redirect", 300..399)
+    # Overlapping ranges are now supported - most recently added wins in overlapping region
+    lookup << Responder.new("Bad", 250..350)
 
     expect(lookup.find(204)&.name).to eq('Success')
-    expect(lookup.find(350)&.name).to eq('Redirect')
-
-    # Overlapping insert raises an error
-    expect {
-      lookup << Responder.new("Bad", 250..350)
-    }.to raise_error(ArgumentError, /overlaps/)
+    expect(lookup.find(350)&.name).to eq('Bad')
+    expect(lookup.find(200)&.name).to eq('Success')
+    expect(lookup.find(249)&.name).to eq('Success')
+    expect(lookup.find(250)&.name).to eq('Bad')  # Overlapping region - Bad wins
+    expect(lookup.find(299)&.name).to eq('Bad')  # Overlapping region - Bad wins
+    expect(lookup.find(300)&.name).to eq('Bad')  # Overlapping region - Bad wins
+    expect(lookup.find(351)&.name).to eq('Redirect')
   end
 end
