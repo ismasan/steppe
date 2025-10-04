@@ -6,11 +6,11 @@ RSpec.describe Steppe::ResponderRegistry do
   specify do
     registry = described_class.new
 
-    json_responder = Steppe::Responder.new(statuses: 200, content_type: 'application/json')
-    json_error_responder = Steppe::Responder.new(statuses: (400...500), content_type: 'application/json')
-    html_responder = Steppe::Responder.new(statuses: 200, content_type: 'text/html')
-    application_responder = Steppe::Responder.new(statuses: 200, content_type: 'application/*')
-    fallback_responder = Steppe::Responder.new(statuses: (200...600), content_type: '*/*')
+    json_responder = Steppe::Responder.new(statuses: 200, accepts: 'application/json')
+    json_error_responder = Steppe::Responder.new(statuses: (400...500), accepts: 'application/json')
+    html_responder = Steppe::Responder.new(statuses: 200, accepts: 'text/html')
+    application_responder = Steppe::Responder.new(statuses: 200, accepts: 'application/*')
+    fallback_responder = Steppe::Responder.new(statuses: (200...600), accepts: '*/*')
 
     registry << json_responder
     registry << json_error_responder

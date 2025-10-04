@@ -23,9 +23,10 @@ module Steppe
     end
 
     def <<(responder)
-      @map[responder.content_type.type] ||= {}
-      @map[responder.content_type.type][responder.content_type.subtype] ||= StatusMap.new
-      @map[responder.content_type.type][responder.content_type.subtype] << responder
+      accepts = responder.accepts
+      @map[accepts.type] ||= {}
+      @map[accepts.type][accepts.subtype] ||= StatusMap.new
+      @map[accepts.type][accepts.subtype] << responder
       self
     end
 
