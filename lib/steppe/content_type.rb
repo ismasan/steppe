@@ -1,7 +1,10 @@
 # frozen_string_literal: true
 
 module Steppe
-  class ContentType < Data.define(:type, :subtype, :params)
+  class ContentType < Data.define(:type, :subtype, :params, :type_key, :subtype_key)
+    def self.new(type, subtype, params = {})
+      super(type, subtype, params.freeze, type, "#{type}/#{subtype}")
+    end
 
     TOKEN = /[!#$%&'*+\-.^_`|~0-9A-Z]+/i
     MIME_TYPE = /(?<type>#{TOKEN})\/(?<subtype>#{TOKEN})/
@@ -9,6 +12,8 @@ module Steppe
     PARAMETER = /\s*;\s*(?<key>#{TOKEN})=(?<value>#{TOKEN}|#{QUOTED_STRING})/
 
     def self.parse(str)
+      return str if str.is_a?(ContentType)
+
       m = MIME_TYPE.match(str) or
       raise ArgumentError, "invalid content type: #{str.inspect}"
 

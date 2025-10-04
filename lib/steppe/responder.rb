@@ -1,19 +1,20 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'steppe/content_type'
 
 module Steppe
   class Responder < Plumb::Pipeline
     DEFAULT_STATUSES = (200..200).freeze
     DEFAULT_SERIALIZER = Types::Static[{}.freeze].freeze
 
-    attr_reader :statuses, :accepts, :serializer
+    attr_reader :statuses, :content_type, :serializer
     attr_accessor :description
 
-    def initialize(statuses: DEFAULT_STATUSES, accepts: ContentTypes::JSON, &)
+    def initialize(statuses: DEFAULT_STATUSES, accepts: nil, content_type: ContentTypes::JSON, &)
       @statuses = statuses.is_a?(Range) ? statuses : (statuses..statuses)
       @description = nil
-      @accepts = accepts
+      @content_type = ContentType.parse(content_type)
       @serializer = DEFAULT_SERIALIZER
       super(&)
     end
@@ -23,6 +24,11 @@ module Steppe
       step @serializer
     end
 
+    def ==(other)
+      other.is_a?(Responder) && other.statuses == statuses && other.content_type == content_type
+    end
+
+    def inspect = "<#{self.class}##{object_id} statuses:#{statuses} content_type:#{content_type}>"
     def node_name = :responder
 
     # TODO: Content negotiation here
