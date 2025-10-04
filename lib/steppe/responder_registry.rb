@@ -7,6 +7,8 @@ module Steppe
   class ResponderRegistry
     include Enumerable
 
+    WILDCARD = '*'
+
     attr_reader :node_name
 
     def initialize
@@ -21,11 +23,9 @@ module Steppe
     end
 
     def <<(responder)
-      @map[responder.content_type.type_key] ||= StatusMap.new
-      @map[responder.content_type.subtype_key] ||= StatusMap.new
-
-      @map[responder.content_type.type_key] << responder
-      @map[responder.content_type.subtype_key] << responder
+      @map[responder.content_type.type] ||= {}
+      @map[responder.content_type.type][responder.content_type.subtype] ||= StatusMap.new
+      @map[responder.content_type.type][responder.content_type.subtype] << responder
       self
     end
 
@@ -43,13 +43,30 @@ module Steppe
 
     def find_status_map(content_types)
       content_types.each do |ct|
-        status_map = @map[ct.subtype_key]
-        return status_map if status_map
+        # For each content type, try to find the most specific match
+        # 1. application/json
+        # 2. application/* return first available subtype
+        # If no match, try the next content type in the list
+        # If no match, return try '*/*'
+        # If no match, return nil
+        #
+        # If accepts is '*/*', return the first available responder
+        return @map.values.first.values.first if ct.type == WILDCARD
 
-        status_map = @map[ct.type_key]
-        return status_map if status_map
+        type_level = @map[ct.type] # 'application'
+        next unless type_level
+
+        if ct.subtype == WILDCARD # find first available subtype. More specific ones should be first
+          return type_level.values.first
+        else
+          status_map = type_level[ct.subtype] # 'application/json'
+          status_map ||= type_level[WILDCARD] # 'application/*'
+          return status_map if status_map
+        end
       end
-      nil
+
+      wildcard_level = @map[WILDCARD]
+      wildcard_level ? wildcard_level[WILDCARD] : nil
     end
   end
 end
