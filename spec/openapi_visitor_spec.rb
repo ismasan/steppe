@@ -49,9 +49,11 @@ RSpec.describe Steppe::OpenAPIVisitor do
     endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
       e.description = 'Test endpoint'
       e.tags = %w[users]
-      e.serialize do
+      e.json do
         attribute :name, String
         attribute :email, Steppe::Types::Email
+      end
+      e.html do |c|
       end
     end
 
@@ -61,25 +63,25 @@ RSpec.describe Steppe::OpenAPIVisitor do
     expect(data.dig('/users', 'post', 'operationId')).to eq('test')
     expect(data.dig('/users', 'post', 'parameters')).to eq([])
     expect(data.dig('/users', 'post', 'responses', '2XX')).to eq({
-                                                                   'description' => 'Response for status 200...300',
-                                                                   'content' => {
-                                                                     'application/json' => {
-                                                                       'schema' => {
-                                                                         'type' => 'object',
-                                                                         'properties' => {
-                                                                           'name' => {
-                                                                             'type' => 'string'
-                                                                           },
-                                                                           'email' => {
-                                                                             'type' => 'string',
-                                                                             'format' => 'email'
-                                                                           }
-                                                                         },
-                                                                         'required' => %w[name email]
-                                                                       }
-                                                                     }
-                                                                   }
-                                                                 })
+      'description' => 'Response for status 200...300',
+      'content' => {
+        'application/json' => {
+          'schema' => {
+            'type' => 'object',
+            'properties' => {
+              'name' => {
+                'type' => 'string'
+              },
+              'email' => {
+                'type' => 'string',
+                'format' => 'email'
+              }
+            },
+            'required' => %w[name email]
+          }
+        }
+      }
+    })
   end
 
   describe 'Steppe::Service' do
