@@ -40,13 +40,13 @@ module Steppe
       points = []
       @responders.each_with_index do |responder, index|
         range = responder.statuses
-        # Add index as priority - later additions have higher priority
+        # Add index as priority - earlier additions have higher priority
         points << [range.begin, :start, index, responder]
         points << [range.end + 1, :end, index, responder]
       end
       # Sort by position, then by type (:end before :start at same position),
-      # then by reverse priority (higher index first)
-      points.sort_by! { |pos, type, priority, _| [pos, type == :start ? 1 : 0, -priority] }
+      # then by priority (lower index first)
+      points.sort_by! { |pos, type, priority, _| [pos, type == :start ? 1 : 0, priority] }
 
       # Build non-overlapping segments
       segments = []
@@ -56,8 +56,8 @@ module Steppe
       points.each do |point, type, priority, responder|
         # If we have active responders and moved to a new point, create segment
         if !active.empty? && prev_point && prev_point < point
-          # Use the highest priority responder (max priority value)
-          winner = active.max_by { |_, p| p }.first
+          # Use the highest priority responder (min priority value = first added)
+          winner = active.min_by { |_, p| p }.first
           segments << [prev_point, point - 1, winner]
         end
 
