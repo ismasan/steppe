@@ -266,24 +266,4 @@ RSpec.describe Steppe::Endpoint do
     expect(result.response.status).to eq(304)
     expect(result.response.body).to eq([])
   end
-
-  private
-
-  def build_request(path, query: {}, body: nil, headers: {}, accepts: 'application/json', content_type: nil)
-    content_type ||= accepts
-
-    Steppe::Request.new(Rack::MockRequest.env_for(
-      path,
-      headers.merge({
-        'CONTENT_TYPE' => content_type,
-        'HTTP_ACCEPT' => accepts,
-        'action_dispatch.request.path_parameters' => query,
-        Rack::RACK_INPUT => body ? StringIO.new(body) : nil
-      })
-    ))
-  end
-
-  def parse_body(response)
-    JSON.parse(response.body.first, symbolize_names: true)
-  end
 end

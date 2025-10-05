@@ -84,20 +84,4 @@ RSpec.describe Steppe::Responder do
       expect(conn.response.body).to eq([%(<h1>John</h1><span>ID: 1</span>)])
     end
   end
-
-  private
-
-  def build_conn(value)
-    request = build_request('/test')
-    Steppe::Result::Continue.new(value, request:)
-  end
-
-  def build_request(path, query: {}, body: nil, content_type: 'application/json')
-    Steppe::Request.new(Rack::MockRequest.env_for(
-      path,
-      'CONTENT_TYPE' => content_type,
-      'action_dispatch.request.path_parameters' => query,
-      Rack::RACK_INPUT => body ? StringIO.new(body) : nil
-    ))
-  end
 end
