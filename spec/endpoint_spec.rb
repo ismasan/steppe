@@ -42,35 +42,48 @@ RSpec.describe Steppe::Endpoint do
   describe 'content negotiation' do
     let(:endpoint) do
       Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+        e.query_schema(
+          id: Steppe::Types::Lax::Integer
+        )
+
+        # An Arbitrary step to do some work
         e.step do |conn|
-          conn.continue(name: 'Joe')
+          conn.continue(name: 'Joe', id: conn.params[:id])
         end
 
+        # Respond to text/html requests
+        # with Papercraft template
         e.html do |conn|
-          h1 "User: #{conn.value[:name]}"
+          h1 "User: #{conn.value[:name]}."
+          p "ID: #{conn.value[:id]}."
         end
 
+        # Respond to application/json requests
+        # with inline serializer
+        # This will generate OpenAPI schema automatically
         e.json do
+          attribute :id, Integer
           attribute :name, String
           def name = object[:name]
+          def id = object[:id]
         end
       end
     end
 
     specify 'HTML response' do
-      request = build_request('/users/1', headers: { 'HTTP_ACCEPT' => 'text/html' })
+      request = build_request('/users/1', query: {id: '1'}, accepts: 'text/html')
       result = endpoint.run(request)
       expect(result.response.status).to eq(200)
       expect(result.response.content_type).to eq('text/html')
-      expect(result.response.body).to eq(['<h1>User: Joe</h1>'])
+      expect(result.response.body).to eq(['<h1>User: Joe.</h1><p>ID: 1.</p>'])
     end
 
     specify 'JSON response' do
-      request = build_request('/users/1', headers: { 'HTTP_ACCEPT' => 'application/json' })
+      request = build_request('/users/1', query: {id: '1'}, accepts: 'application/json')
       result = endpoint.run(request)
       expect(result.response.status).to eq(200)
       expect(result.response.content_type).to eq('application/json')
-      expect(result.response.body).to eq(["{\"name\":\"Joe\"}"])
+      expect(result.response.body).to eq(["{\"id\":1,\"name\":\"Joe\"}"])
     end
   end
 
@@ -256,11 +269,14 @@ RSpec.describe Steppe::Endpoint do
 
   private
 
-  def build_request(path, query: {}, body: nil, headers: {}, content_type: 'application/json')
+  def build_request(path, query: {}, body: nil, headers: {}, accepts: 'application/json', content_type: nil)
+    content_type ||= accepts
+
     Steppe::Request.new(Rack::MockRequest.env_for(
       path,
       headers.merge({
         'CONTENT_TYPE' => content_type,
+        'HTTP_ACCEPT' => accepts,
         'action_dispatch.request.path_parameters' => query,
         Rack::RACK_INPUT => body ? StringIO.new(body) : nil
       })
