@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'rack'
+require_relative './spec_helper'
 
 RSpec.describe Steppe::Endpoint do
   let(:user_class) do
@@ -19,7 +20,7 @@ RSpec.describe Steppe::Endpoint do
       # Compact syntax. Registers a responder
       # for JSON, (200..299) statuses with an
       # inline serializer
-      e.serialize do
+      e.json do
         attribute(:requested_at, Steppe::Types::Time.transform(String, &:iso8601))
         attribute :id, Integer
         attribute :name, String
@@ -36,6 +37,41 @@ RSpec.describe Steppe::Endpoint do
     expect(result.response.status).to eq(200)
     expect(result.response.content_type).to eq('application/json')
     expect(parse_body(result.response)).to eq(requested_at: now.iso8601, id: 1, name: 'Joe')
+  end
+
+  describe 'content negotiation' do
+    let(:endpoint) do
+      Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+        e.step do |conn|
+          conn.continue(name: 'Joe')
+        end
+
+        e.html do |conn|
+          h1 "User: #{conn.value[:name]}"
+        end
+
+        e.json do
+          attribute :name, String
+          def name = object[:name]
+        end
+      end
+    end
+
+    specify 'HTML response' do
+      request = build_request('/users/1', headers: { 'HTTP_ACCEPT' => 'text/html' })
+      result = endpoint.run(request)
+      expect(result.response.status).to eq(200)
+      expect(result.response.content_type).to eq('text/html')
+      expect(result.response.body).to eq(['<h1>User: Joe</h1>'])
+    end
+
+    specify 'JSON response' do
+      request = build_request('/users/1', headers: { 'HTTP_ACCEPT' => 'application/json' })
+      result = endpoint.run(request)
+      expect(result.response.status).to eq(200)
+      expect(result.response.content_type).to eq('application/json')
+      expect(result.response.body).to eq(["{\"name\":\"Joe\"}"])
+    end
   end
 
   describe '#query_schema' do
@@ -171,7 +207,8 @@ RSpec.describe Steppe::Endpoint do
         conn.invalid(errors: { name: 'is invalid' })
       end
 
-      e.respond(200) do |r|
+      e.respond(statuses: 200) do |r|
+        r.description = 'preferred'
         r.step do |conn|
           conn.valid(user_class.new(1, 'Joe'))
         end
@@ -219,12 +256,14 @@ RSpec.describe Steppe::Endpoint do
 
   private
 
-  def build_request(path, query: {}, body: nil, content_type: 'application/json')
+  def build_request(path, query: {}, body: nil, headers: {}, content_type: 'application/json')
     Steppe::Request.new(Rack::MockRequest.env_for(
       path,
-      'CONTENT_TYPE' => content_type,
-      'action_dispatch.request.path_parameters' => query,
-      Rack::RACK_INPUT => body ? StringIO.new(body) : nil
+      headers.merge({
+        'CONTENT_TYPE' => content_type,
+        'action_dispatch.request.path_parameters' => query,
+        Rack::RACK_INPUT => body ? StringIO.new(body) : nil
+      })
     ))
   end
 

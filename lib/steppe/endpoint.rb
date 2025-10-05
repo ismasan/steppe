@@ -3,7 +3,6 @@
 require 'mustermann'
 require 'steppe/responder'
 require 'steppe/responder_registry'
-require 'steppe/serializer'
 require 'steppe/result'
 
 module Steppe
@@ -118,13 +117,13 @@ module Steppe
       super(freeze_after: false, &)
 
       # Fallback responders
-      respond 200..201, ContentTypes::JSON, DefaultEntitySerializer
-      respond 204, ContentTypes::JSON
+      respond 204, :json
+      respond 304, :json
+      respond 200..299, :json, DefaultEntitySerializer
       # TODO: match any content type
       # respond 304, '*/*'
-      respond 304, ContentTypes::JSON
-      respond 404, ContentTypes::JSON, DefaultEntitySerializer
-      respond 422, ContentTypes::JSON, DefaultEntitySerializer
+      respond 404, :json, DefaultEntitySerializer
+      respond 422, :json, DefaultEntitySerializer
       freeze
     end
 
@@ -172,38 +171,126 @@ module Steppe
       @path
     end
 
-    def serialize(status = (200...300), serializer = nil, &block)
-      serializer ||= Class.new(Serializer, &block)
-      respond(status) do |r|
-        r.description = "Response for status #{status}"
-        r.serialize serializer
+    def json(statuses = (200...300), serializer = nil, &block)
+      respond(statuses:, accepts: :json) do |r|
+        r.description = "Response for status #{statuses}"
+        r.serialize serializer || block
       end
+
       self
     end
 
+    def html(statuses = (200...300), view = nil, &block)
+      respond(statuses:, accepts: :html) do |r|
+        r.serialize view || block
+      end
+
+      self
+    end
+
+    # Define how the endpoint responds to specific HTTP status codes and content types.
+    #
+    # Responders are registered in order and when ranges overlap, the first registered
+    # responder wins. This allows you to define specific handlers first, then fallback
+    # handlers for broader ranges.
+    #
+    # @overload respond(status)
+    #   Basic responder for a single status code
+    #   @param status [Integer] HTTP status code
+    #   @yield [responder] Optional configuration block
+    #   @example
+    #     respond 200  # Basic 200 response
+    #     respond 404 do |r|
+    #       r.serialize ErrorSerializer
+    #     end
+    #
+    # @overload respond(status, accepts)
+    #   Responder for specific status and content type
+    #   @param status [Integer] HTTP status code
+    #   @param accepts [String, Symbol] Content type (e.g., :json, 'application/json')
+    #   @yield [responder] Optional configuration block
+    #   @example
+    #     respond 200, :json
+    #     respond 404, 'text/html' do |r|
+    #       r.serialize ErrorPageView
+    #     end
+    #
+    # @overload respond(status, accepts, serializer)
+    #   Responder with predefined serializer
+    #   @param status [Integer] HTTP status code
+    #   @param accepts [String, Symbol] Content type
+    #   @param serializer [Class, Proc] Serializer class or block
+    #   @yield [responder] Optional configuration block
+    #   @example
+    #     respond 200, :json, UserListSerializer
+    #     respond 404, :json, ErrorSerializer
+    #
+    # @overload respond(status_range, accepts, serializer)
+    #   Responder for a range of status codes
+    #   @param status_range [Range] Range of HTTP status codes
+    #   @param accepts [String, Symbol] Content type
+    #   @param serializer [Class, Proc] Serializer class or block
+    #   @yield [responder] Optional configuration block
+    #   @example
+    #     # First registered wins in overlaps
+    #     respond 201, :json, CreatedSerializer     # Specific handler for 201
+    #     respond 200..299, :json, SuccessSerializer # Fallback for other 2xx
+    #
+    # @overload respond(responder)
+    #   Add a pre-configured Responder instance
+    #   @param responder [Responder] Pre-configured responder
+    #   @example
+    #     custom = Steppe::Responder.new(statuses: 200, accepts: :xml) do |r|
+    #       r.serialize XMLUserSerializer
+    #     end
+    #     respond custom
+    #
+    # @overload respond(**options)
+    #   Responder with keyword arguments
+    #   @option statuses [Integer, Range] Status code(s)
+    #   @option accepts [String, Symbol] Content type
+    #   @option content_type [String, Symbol] specific Content-Type header to add to response
+    #   @option serializer [Class, Proc] Optional serializer
+    #   @yield [responder] Optional configuration block
+    #   @example
+    #     respond statuses: 200..299, accepts: :json do |r|
+    #       r.serialize SuccessSerializer
+    #     end
+    #
+    # @return [self] Returns self for method chaining
+    # @raise [ArgumentError] When invalid argument combinations are provided
+    #
+    # @note Responders are resolved by ResponderRegistry using status code and Accept header
+    # @note When ranges overlap, first registered responder wins
+    # @note Default accept type is :json (application/json) when not specified
+    #
+    # @see Responder
+    # @see ResponderRegistry
+    # @see Serializer
+    Accepts = Types::String[ContentType::MIME_TYPE] | Types::Symbol
+    Status = Types::Integer | Types::Any[Range]
+
     def respond(*args, &)
       case args
-      in [Integer => status] unless block_given?
-        @responders << Responder.new(statuses: status)
-      in [Integer => status, String => accepts] unless block_given?
-        @responders << Responder.new(statuses: status, accepts:)
-      in [Integer => status] if block_given?
-        @responders << Responder.new(statuses: status, &)
-      in [Integer => status, String => accepts] if block_given?
-        @responders << Responder.new(statuses: status, accepts:, &)
-      in [Integer => status, String => accepts, Plumb::Composable => serializer]
-        @responders << Responder.new(statuses: status, accepts:) { |r| r.serialize(serializer) }
-      in [Range => status, String => accepts, Plumb::Composable => serializer]
-        @responders << Responder.new(statuses: status, accepts:) { |r| r.serialize(serializer) }
-      in [Range => statuses] if block_given?
-        @responders << Responder.new(statuses:, &)
-      in [Range => statuses, String => accepts] if block_given?
-        @responders << Responder.new(statuses:, accepts:, &)
       in [Responder => responder]
         @responders << responder
+
+      in [statuses] if Status === statuses
+        @responders << Responder.new(statuses:, &)
+
+      in [statuses, accepts] if Status === statuses && Accepts === accepts
+        @responders << Responder.new(statuses:, accepts:, &)
+
+      in [statuses, accepts, Object => serializer] if Status === statuses && Accepts === accepts
+        @responders << Responder.new(statuses:, accepts:, serializer:, &)
+
+      in [Hash => kargs]
+        @responders << Responder.new(**kargs, &)
+
       else
         raise ArgumentError, "Invalid arguments: #{args.inspect}"
       end
+
       self
     end
 
@@ -226,7 +313,8 @@ module Steppe
 
     def call(conn)
       conn = super(conn)
-      responder = responders.resolve(conn) || FALLBACK_RESPONDER
+      accepts = conn.request.get_header('HTTP_ACCEPT') || ContentTypes::JSON
+      responder = responders.resolve(conn.response.status, accepts)# || FALLBACK_RESPONDER
       # Conn might be a Halt now, because a step halted processing.
       # We set it back to Continue so that the responder pipeline
       # can process it through its steps.
