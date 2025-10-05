@@ -312,7 +312,7 @@ module Steppe
     def call(conn)
       conn = super(conn)
       accepts = conn.request.get_header('HTTP_ACCEPT') || ContentTypes::JSON
-      responder = responders.resolve(conn.response.status, accepts)# || FALLBACK_RESPONDER
+      responder = responders.resolve(conn.response.status, accepts) || FALLBACK_RESPONDER
       # Conn might be a Halt now, because a step halted processing.
       # We set it back to Continue so that the responder pipeline
       # can process it through its steps.
