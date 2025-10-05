@@ -181,9 +181,7 @@ module Steppe
     end
 
     def html(statuses = (200...300), view = nil, &block)
-      respond(statuses:, accepts: :html) do |r|
-        r.serialize view || block
-      end
+      respond(statuses, :html, view || block)
 
       self
     end
