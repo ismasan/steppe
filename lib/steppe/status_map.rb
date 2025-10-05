@@ -13,6 +13,12 @@ module Steppe
       self
     end
 
+    def each(&block)
+      return enum_for(:each) unless block
+
+      @responders.each(&block)
+    end
+
     def find(status)
       lo = 0
       hi = @index.size - 1

@@ -31,7 +31,13 @@ module Steppe
     end
 
     def each(&block)
-      @responders.each(&block)
+      return enum_for(:each) unless block_given?
+
+      @map.each_value do |subtype_map|
+        subtype_map.each_value do |status_map|
+          status_map.each(&block)
+        end
+      end
     end
 
     def resolve(response_status, accepted_content_types)

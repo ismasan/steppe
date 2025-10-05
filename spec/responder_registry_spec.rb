@@ -39,5 +39,9 @@ RSpec.describe Steppe::ResponderRegistry do
 
     # Multiple matches, highest quality wins
     expect(registry.resolve(200, 'text/html; q=0.9, application/json; q=0.8')).to eq(html_responder)
+
+    # #each
+    responders = registry.each.to_a
+    expect(responders).to include(json_responder, json_error_responder, html_responder, application_responder, fallback_responder)
   end
 end
