@@ -18,7 +18,7 @@ module Steppe
       def node_name = :tag
     end
 
-    attr_reader :endpoints, :node_name, :servers, :tags
+    attr_reader :node_name, :servers, :tags
     attr_accessor :title, :description, :version
 
     def initialize(&)
@@ -44,6 +44,30 @@ module Steppe
     def tag(name, description: nil, external_docs: nil)
       @tags << Tag.parse(name:, description:, external_docs:)
       self
+    end
+
+    # A custom serializer that generates the OpenAPI specification in JSON format.
+    class OpenAPISerializer
+      # @param service [Steppe::Service] The service instance to generate the OpenAPI spec from.
+      def initialize(service)
+        @service = service
+      end
+
+      # @param conn [Steppe::Result]
+      # @return [Steppe::Result] The result containing the OpenAPI spec in JSON format.
+      def call(conn)
+        spec = Steppe::OpenAPIVisitor.from_request(@service, conn.request)
+        conn.continue JSON.dump(spec)
+      end
+    end
+
+    # Generates an endpoint that serves the OpenAPI specification in JSON format.
+    # @param path [String] The path where the OpenAPI spec will be available (default: '/')
+    def specs(path = '/')
+      get :__open_api, path do |e|
+        e.no_spec!
+        e.json 200..299, OpenAPISerializer.new(self)
+      end
     end
 
     VERBS.each do |verb|

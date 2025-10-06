@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rack'
+require 'spec_helper'
 
 RSpec.describe Steppe::Service do
   subject(:service) do
@@ -8,6 +8,8 @@ RSpec.describe Steppe::Service do
       api.title = 'Users'
       api.description = 'Users service'
       api.version = '1.0.0'
+
+      api.specs('/schemas')
 
       api.get :users, '/users' do |e|
         e.description = 'List users'
@@ -37,5 +39,17 @@ RSpec.describe Steppe::Service do
     expect(service.version).to eq('1.0.0')
     expect(service[:users].description).to eq('List users')
     expect(service[:create_user].description).to eq('Create user')
+  end
+
+  specify 'GET /schemas' do
+    specs_endpoint = service[:__open_api]
+    expect(specs_endpoint.path.to_s).to eq('/schemas')
+    expect(specs_endpoint.verb).to eq(:get)
+
+    request = build_request('/schemas')
+    result = specs_endpoint.run(request)
+    expect(result.valid?).to be true
+    spec = parse_body(result.response)
+    expect(spec.keys).to match_array(%i[openapi info servers tags paths])
   end
 end

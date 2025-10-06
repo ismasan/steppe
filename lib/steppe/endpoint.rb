@@ -208,6 +208,7 @@ module Steppe
       @payload_schemas = {}
       @body_parsers = {}
       @description = 'An endpoint'
+      @specced = true
       @tags = []
       self.path = path
       super(freeze_after: false, &)
@@ -222,6 +223,13 @@ module Steppe
       respond 422, :json, DefaultEntitySerializer
       freeze
     end
+
+    def inspect
+      %(<#{self.class}##{object_id} [#{rel_name}] #{verb.to_s.upcase} #{path}>)
+    end
+
+    def specced? = @specced
+    def no_spec! = @specced = false
 
     # Node name for OpenAPI documentation
     def node_name = :endpoint

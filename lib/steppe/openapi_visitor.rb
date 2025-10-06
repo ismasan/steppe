@@ -46,6 +46,8 @@ module Steppe
     end
 
     on(:endpoint) do |node, paths|
+      return paths unless node.specced?
+
       path_template = node.path.to_templates.first
       path = paths[path_template] || {}
       verb = path[node.verb.to_s] || {}

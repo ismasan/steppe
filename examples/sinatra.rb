@@ -100,6 +100,8 @@ Service = Steppe::Service.new do |api|
 
   # api.security_scheme(:bootic_auth, bootic)
 
+  api.specs('/')
+
   # An endpoint to list users
   api.get :users, '/users' do |e|
     e.description = 'List users'
@@ -301,15 +303,6 @@ class App < Sinatra::Base
       origins '*'
       resource '*', headers: :any, methods: :any
     end
-  end
-
-  get '/?' do
-    content_type 'application/json'
-    JSON.dump(Steppe::OpenAPIVisitor.from_request(Service, request))
-  end
-
-  get '/foo/:id' do
-    params.inspect
   end
 
   Service.endpoints.each do |endpoint|
