@@ -295,6 +295,29 @@ api.get :user, '/users/:id' do |e|
 end
 ```
 
+#### HTML templates
+
+HTML templates rely on [Papercraft](https://papercraft.noteflakes.com). It's possible to register your own templating though.
+
+You can pass inline templates like in the example above, or named constants pointing to HTML components.
+
+```ruby
+# Somewhere in your app:
+UserTemplate = proc do |conn|
+  html5 {
+    body {
+      h1 conn.value.name
+      p "Email: #{conn.value.email}"
+    }
+  }
+end
+
+# In your endpoint
+e.html(200..299, UserTemplate)
+```
+
+See Papercraft's documentation to learn how to work with [layouts](https://papercraft.noteflakes.com/docs/03-template-composition/02-working-with-layouts), nested [components](https://papercraft.noteflakes.com/docs/03-template-composition/01-component-templates), and more.
+
 ### Reusable Action Classes
 
 Encapsulate logic in action classes:
