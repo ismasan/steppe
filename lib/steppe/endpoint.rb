@@ -286,9 +286,9 @@ module Steppe
         [ContentTypes::JSON, sc]
       in [Plumb::Composable => sc]
         [ContentTypes::JSON, sc]
-      in [Object => content_type, Hash => sc] if MatchContentType === content_type
+      in [MatchContentType => content_type, Hash => sc]
         [content_type, sc]
-      in [Object => content_type, Plumb::Composable => sc] if MatchContentType === content_type
+      in [MatchContentType => content_type, Plumb::Composable => sc]
         [content_type, sc]
       else
         raise ArgumentError, "Invalid arguments: #{args.inspect}. Expects [Hash] or [Plumb::Composable], and an optional content type."
@@ -465,13 +465,13 @@ module Steppe
       in [Responder => responder]
         @responders << responder
 
-      in [statuses] if MatchStatus === statuses
+      in [MatchStatus => statuses]
         @responders << Responder.new(statuses:, &)
 
-      in [statuses, accepts] if MatchStatus === statuses && MatchContentType === accepts
+      in [MatchStatus => statuses, MatchContentType => accepts]
         @responders << Responder.new(statuses:, accepts:, &)
 
-      in [statuses, accepts, Object => serializer] if MatchStatus === statuses && MatchContentType === accepts
+      in [MatchStatus => statuses, MatchContentType => accepts, Object => serializer]
         @responders << Responder.new(statuses:, accepts:, serializer:, &)
 
       in [Hash => kargs]
