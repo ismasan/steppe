@@ -6,7 +6,52 @@ require 'steppe/responder_registry'
 require 'steppe/result'
 
 module Steppe
+  # Endpoint represents a single API endpoint with request validation, processing, and response handling.
+  #
+  # Inherits from Plumb::Pipeline to provide composable request processing through steps.
+  # Each endpoint defines an HTTP verb, URL path pattern, input validation schemas, processing
+  # logic, and response serialization strategies.
+  #
+  # @example Basic endpoint definition
+  #   endpoint = Endpoint.new(:users_list, :get, path: '/users') do |e|
+  #     # Define query parameter validation
+  #     e.query_schema(
+  #       page: Types::Integer.default(1),
+  #       per_page: Types::Integer.default(20)
+  #     )
+  #
+  #     # Add processing steps
+  #     e.step do |result|
+  #       users = User.limit(result.params[:per_page]).offset((result.params[:page] - 1) * result.params[:per_page])
+  #       result.continue(data: users)
+  #     end
+  #
+  #     # Define response serialization
+  #     e.respond 200, :json, UserListSerializer
+  #   end
+  #
+  # @example Endpoint with payload validation
+  #   endpoint = Endpoint.new(:create_user, :post, path: '/users') do |e|
+  #     e.payload_schema(
+  #       name: Types::String,
+  #       email: Types::String.email
+  #     )
+  #
+  #     e.step do |result|
+  #       user = User.create(result.params)
+  #       result.respond_with(201).continue(data: user)
+  #     end
+  #
+  #     e.respond 201, :json, UserSerializer
+  #   end
+  #
+  # @see Plumb::Pipeline
+  # @see Result
+  # @see Responder
+  # @see ResponderRegistry
   class Endpoint < Plumb::Pipeline
+    # Fallback responder used when no matching responder is found for a status/content-type combination.
+    # Returns a JSON error message indicating the missing responder configuration.
     FALLBACK_RESPONDER = Responder.new(statuses: (100..599), accepts: 'application/json') do |r|
       r.serialize do
         attribute :message, String
@@ -14,6 +59,8 @@ module Steppe
       end
     end
 
+    # Default serializer used for successful and error responses when no custom serializer is provided.
+    # Returns the HTTP status, params, and validation errors.
     class DefaultEntitySerializer < Steppe::Serializer
       attribute :http, Steppe::Types::Hash[status: Types::Integer.example(200)]
       attribute :params, Steppe::Types::Hash.example({'param' => 'value'}.freeze)
@@ -24,13 +71,19 @@ module Steppe
       def errors = result.errors
     end
 
+    # Internal step that validates query parameters against a schema.
+    # Merges validated query params into the result params hash.
+    # Returns 422 Unprocessable Entity if validation fails.
     class QueryValidator
       attr_reader :query_schema
 
+      # @param query_schema [Hash, Plumb::Composable] Schema definition for query parameters
       def initialize(query_schema)
         @query_schema = query_schema.is_a?(Hash) ? Types::Hash[query_schema] : query_schema
       end
 
+      # @param conn [Result] The current result/connection object
+      # @return [Result] Updated result with validated params or error response
       def call(conn)
         result = query_schema.resolve(conn.request.steppe_url_params)
         conn = conn.copy(params: conn.params.merge(result.value))
@@ -40,14 +93,20 @@ module Steppe
       end
     end
 
+    # Internal step that validates request payload against a schema for a specific content type.
+    # Only validates if the request content type matches. Merges validated payload into result params.
+    # Returns 422 Unprocessable Entity if validation fails.
     class PayloadValidator
       attr_reader :content_type, :payload_schema
 
+      # @param content_type [String] Content type to validate (e.g., 'application/json')
       def initialize(content_type, payload_schema)
         @content_type = content_type
         @payload_schema = payload_schema.is_a?(Hash) ? Types::Hash[payload_schema] : payload_schema
       end
 
+      # @param conn [Result] The current result/connection object
+      # @return [Result] Updated result with validated params or error response
       def call(conn)
         return conn unless content_type == conn.request.content_type
 
@@ -59,23 +118,31 @@ module Steppe
       end
     end
 
+    # Internal step that parses request body based on content type.
+    # Supports JSON and plain text parsing out of the box.
+    # Returns 400 Bad Request if parsing fails.
     class BodyParser
       MissingParserError = Class.new(ArgumentError)
 
       include Plumb::Composable
 
+      # Registry of content type parsers
       def self.parsers
         @parsers ||= {}
       end
 
+      # Default JSON parser - parses body and symbolizes keys
       parsers[ContentTypes::JSON] = proc do |body|
         ::JSON.parse(body.read, symbolize_names: true)
       end
 
+      # Default text parser - reads body as string
       parsers[ContentTypes::TEXT] = proc do |body|
         body.read
       end
 
+      # Builds a parser for the given content type
+      # @raise [MissingParserError] if no parser is registered for the content type
       def self.build(content_type)
         parser = parsers[content_type]
         raise MissingParserError, "No parser for content type: #{content_type}" unless parser
@@ -103,6 +170,18 @@ module Steppe
     attr_reader :rel_name, :payload_schemas, :responders
     attr_accessor :description, :tags
 
+    # Creates a new endpoint instance.
+    #
+    # @param rel_name [Symbol] Relation name for this endpoint (e.g., :users_list, :create_user)
+    # @param verb [Symbol] HTTP verb (:get, :post, :put, :patch, :delete, etc.)
+    # @param path [String] URL path pattern (supports Mustermann syntax, e.g., '/users/:id')
+    # @yield [endpoint] Configuration block that receives the endpoint instance
+    #
+    # @example
+    #   Endpoint.new(:users_show, :get, path: '/users/:id') do |e|
+    #     e.step { |result| result.continue(data: User.find(result.params[:id])) }
+    #     e.respond 200, :json, UserSerializer
+    #   end
     def initialize(rel_name, verb, path: '/', &)
       @rel_name = rel_name
       @verb = verb
@@ -116,7 +195,7 @@ module Steppe
       self.path = path
       super(freeze_after: false, &)
 
-      # Fallback responders
+      # Register default responders for common status codes
       respond 204, :json
       respond 304, :json
       respond 200..299, :json, DefaultEntitySerializer
@@ -127,8 +206,25 @@ module Steppe
       freeze
     end
 
+    # Node name for OpenAPI documentation
     def node_name = :endpoint
 
+    # Defines or returns the query parameter validation schema.
+    #
+    # When called with a schema argument, registers a QueryValidator step to validate
+    # query parameters. When called without arguments, returns the current query schema.
+    #
+    # @overload query_schema(schema)
+    #   @param schema [Hash, Plumb::Composable] Schema definition for query parameters
+    #   @return [void]
+    #   @example
+    #     query_schema(
+    #       page: Types::Integer.default(1),
+    #       search: Types::String.optional
+    #     )
+    #
+    # @overload query_schema
+    #   @return [Plumb::Composable] Current query schema
     def query_schema(sc = nil)
       if sc
         step(QueryValidator.new(sc))
@@ -137,6 +233,28 @@ module Steppe
       end
     end
 
+    # Defines request body validation schema for a specific content type.
+    #
+    # Automatically registers a BodyParser step for the content type if not already registered,
+    # then registers a PayloadValidator step to validate the parsed body.
+    #
+    # @overload payload_schema(schema)
+    #   Define JSON payload schema (default content type)
+    #   @param schema [Hash, Plumb::Composable] Schema definition
+    #   @example
+    #     payload_schema(
+    #       name: Types::String,
+    #       email: Types::String.email
+    #     )
+    #
+    # @overload payload_schema(content_type, schema)
+    #   Define payload schema for specific content type
+    #   @param content_type [String] Content type (e.g., 'application/xml')
+    #   @param schema [Hash, Plumb::Composable] Schema definition
+    #   @example
+    #     payload_schema('application/xml', XMLUserSchema)
+    #
+    # @raise [ArgumentError] if arguments don't match expected patterns
     def payload_schema(*args)
       ctype, stp = case args
       in [Hash => sc]
@@ -158,11 +276,38 @@ module Steppe
       step PayloadValidator.new(ctype, stp)
     end
 
+    # Gets or sets the HTTP verb for this endpoint.
+    #
+    # @overload verb(verb)
+    #   Sets the HTTP verb
+    #   @param verb [Symbol] HTTP verb (:get, :post, :put, :patch, :delete, etc.)
+    #   @return [Symbol] The set verb
+    #
+    # @overload verb
+    #   Gets the current HTTP verb
+    #   @return [Symbol] Current verb
     def verb(vrb = nil)
       @verb = vrb if vrb
       @verb
     end
 
+    # Gets or sets the URL path pattern for this endpoint.
+    #
+    # Path patterns support Mustermann syntax with named parameters (e.g., '/users/:id').
+    # When setting a path, automatically extracts path parameters and merges them into
+    # the query schema.
+    #
+    # @overload path(path)
+    #   Sets the URL path pattern
+    #   @param path [String] URL path pattern with optional named parameters
+    #   @return [Mustermann::Pattern] The compiled path pattern
+    #   @example
+    #     path '/users/:id'
+    #     path '/posts/:post_id/comments/:id'
+    #
+    # @overload path
+    #   Gets the current path pattern
+    #   @return [Mustermann::Pattern] Current path pattern
     def path(pth = nil)
       if pth
         @path = Mustermann.new(pth)
@@ -171,6 +316,21 @@ module Steppe
       @path
     end
 
+    # Convenience method to define a JSON responder.
+    #
+    # @param statuses [Integer, Range] Status code(s) to respond to (default: 200-299)
+    # @param serializer [Class, Proc, nil] Optional serializer class or block
+    # @yield [serializer] Optional block defining serializer inline
+    # @return [self] Returns self for method chaining
+    #
+    # @example With serializer class
+    #   json 200, UserSerializer
+    #
+    # @example With inline block
+    #   json 200 do
+    #     attribute :name, String
+    #     def name = result.data[:name]
+    #   end
     def json(statuses = (200...300), serializer = nil, &block)
       respond(statuses:, accepts: :json) do |r|
         r.description = "Response for status #{statuses}"
@@ -180,6 +340,15 @@ module Steppe
       self
     end
 
+    # Convenience method to define an HTML responder.
+    #
+    # @param statuses [Integer, Range] Status code(s) to respond to (default: 200-299)
+    # @param view [Class, Proc, nil] Optional view class or block
+    # @yield Optional block defining view inline
+    # @return [self] Returns self for method chaining
+    #
+    # @example
+    #   html 200, UserShowView
     def html(statuses = (200...300), view = nil, &block)
       respond(statuses, :html, view || block)
 
@@ -292,6 +461,10 @@ module Steppe
       self
     end
 
+    # Adds a debugging breakpoint step to the endpoint pipeline.
+    # Useful for development and troubleshooting.
+    #
+    # @return [void]
     def debug!
       step do |conn|
         debugger
@@ -299,16 +472,26 @@ module Steppe
       end
     end
 
-    def to_rack
-      proc do |env|
-      end
-    end
-
+    # Executes the endpoint pipeline for a given request.
+    #
+    # Creates an initial Continue result and runs it through the pipeline.
+    #
+    # @param request [Steppe::Request, Rack::Request] The request object
+    # @return [Result] Processing result (Continue or Halt)
     def run(request)
       result = Result::Continue.new(nil, request:)
       call(result)
     end
 
+    # Main processing method that runs the endpoint pipeline and handles response.
+    #
+    # Flow:
+    # 1. Runs all registered steps (query validation, payload validation, business logic)
+    # 2. Resolves appropriate responder based on status code and Accept header
+    # 3. Runs responder pipeline to serialize and format response
+    #
+    # @param conn [Result] Initial result/connection object
+    # @return [Result] Final result with serialized response
     def call(conn)
       conn = super(conn)
       accepts = conn.request.get_header('HTTP_ACCEPT') || ContentTypes::JSON
@@ -321,12 +504,16 @@ module Steppe
 
     private
 
+    # Hook called when adding steps to the pipeline.
+    # Automatically merges query and payload schemas from composable steps.
     def prepare_step(callable)
       merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)
       merge_payload_schema(callable) if callable.respond_to?(:payload_schema)
       callable
     end
 
+    # Merges a query schema from a step into the endpoint's query schema.
+    # Annotates each parameter with metadata indicating whether it's a path or query parameter.
     def merge_query_schema(sc)
       annotated_sc = sc._schema.each_with_object({}) do |(k, v), h|
         pin = @path.names.include?(k.to_s) ? :path : :query
@@ -335,6 +522,8 @@ module Steppe
       @query_schema += annotated_sc
     end
 
+    # Merges a payload schema from a step into the endpoint's payload schemas.
+    # Handles multiple content types and merges schemas if they support the + operator.
     def merge_payload_schema(callable)
       content_type = callable.respond_to?(:content_type) ? callable.content_type : ContentTypes::JSON
 
@@ -347,6 +536,8 @@ module Steppe
       @payload_schemas[content_type] = existing
     end
 
+    # Sets the URL path pattern and extracts path parameters into the query schema.
+    # Path parameters are marked with metadata(in: :path) for OpenAPI documentation.
     def path=(pt)
       @path = Mustermann.new(pt)
       sc = @path.names.each_with_object({}) do |name, h| 
