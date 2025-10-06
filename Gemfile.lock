@@ -1,13 +1,3 @@
-GIT
-  remote: https://github.com/digital-fabric/papercraft.git
-  revision: ece4ea47e364ce650606ff47b88348f9ec871aa4
-  specs:
-    papercraft (2.16)
-      kramdown (~> 2.5.1)
-      kramdown-parser-gfm (~> 1.1.0)
-      rouge (~> 4.5.1)
-      sirop (~> 0.9)
-
 PATH
   remote: ../plumb
   specs:
@@ -54,6 +44,11 @@ GEM
       hansi (~> 0.2.0)
       mustermann (= 3.0.4)
     nio4r (2.7.4)
+    papercraft (2.16)
+      kramdown (~> 2.5.1)
+      kramdown-parser-gfm (~> 1.1.0)
+      rouge (~> 4.5.1)
+      sirop (~> 0.9)
     pp (0.6.2)
       prettyprint
     prettyprint (0.2.0)
@@ -118,7 +113,6 @@ PLATFORMS
 
 DEPENDENCIES
   debug
-  papercraft!
   plumb!
   puma
   rack-cors
