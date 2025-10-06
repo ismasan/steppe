@@ -4,7 +4,7 @@ require 'spec_helper'
 require 'steppe/status_map'
 
 RSpec.describe Steppe::StatusMap do
-  specify do
+  specify 'resolving responder for status ranges, earlier registered wins' do
     Responder = Data.define(:name, :statuses)
 
     lookup = Steppe::StatusMap.new
