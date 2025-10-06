@@ -346,14 +346,33 @@ end
 
 ### OpenAPI Documentation
 
-Generate OpenAPI specs automatically:
+Use a service's `#specs` helper to mount a GET route to automatically serve OpenAPI schemas from.
+
+```ruby
+MyAPI = Steppe::Service.new do |api|
+  api.title = 'Users API'
+  api.description = 'API for managing users'
+  
+  # OpenAPI JSON schemas for this service
+  # will be available at GET /schemas (defaults to /)
+  api.specs('/schemas')
+  
+  # Define API endpoints
+  api.get :list_users, '/users' do |e|
+    # etc
+  end
+end
+```
+
+
+Or use the `OpenAPIVisitor` directly
 
 ```ruby
 # Get OpenAPI JSON
-openapi_spec = Steppe::OpenAPIVisitor.from_request(Service, rack_request)
+openapi_spec = Steppe::OpenAPIVisitor.from_request(MyAPI, rack_request)
 
 # Or generate manually
-openapi_spec = Steppe::OpenAPIVisitor.call(Service)
+openapi_spec = Steppe::OpenAPIVisitor.call(MyAPI)
 ```
 
 <img width="831" height="855" alt="CleanShot 2025-10-06 at 18 04 55" src="https://github.com/user-attachments/assets/fea61225-538b-4653-bdd0-9f8b21c8c389" />
