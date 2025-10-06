@@ -15,5 +15,12 @@ group :examples do
   gem 'puma'
   gem 'rack-cors'
   gem 'rackup'
+end
+
+group :sinatra do
   gem 'sinatra'
+end
+
+group :hanami do
+  gem 'hanami-router', '2.3.0.beta1'
 end
