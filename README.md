@@ -172,7 +172,7 @@ e.step do |conn|
 end
 ```
 
-A step that returns a `Halt` step signals the pipeline to stop processing.
+A step that returns a `Halt` result signals the pipeline to stop processing.
 
 ```ruby
 # This step halts the pipeline
