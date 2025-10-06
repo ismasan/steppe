@@ -228,6 +228,11 @@ module Steppe
       %(<#{self.class}##{object_id} [#{rel_name}] #{verb.to_s.upcase} #{path}>)
     end
 
+    # @return [Proc] Rack-compatible application callable
+    def to_rack
+      proc { |env| run(Steppe::Request.new(env)).response }
+    end
+
     def specced? = @specced
     def no_spec! = @specced = false
 

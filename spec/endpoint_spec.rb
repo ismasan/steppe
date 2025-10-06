@@ -39,6 +39,25 @@ RSpec.describe Steppe::Endpoint do
     expect(parse_body(result.response)).to eq(requested_at: now.iso8601, id: 1, name: 'Joe')
   end
 
+  describe '#to_rack' do
+    it 'returns a Rack-compatible app' do
+      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+        e.step do |conn|
+          conn.valid(user_class.new(conn.params[:id], 'Joe'))
+        end
+
+        e.json do
+          attribute :name, String
+        end
+      end
+
+      request = build_request('/users/1', query: { id: '1' })
+      app = endpoint.to_rack
+      response = app.call(request.env)
+      expect(response.body).to eq(['{"name":"Joe"}'])
+    end
+  end
+
   describe 'content negotiation' do
     let(:endpoint) do
       Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
