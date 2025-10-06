@@ -12,6 +12,7 @@ RSpec.describe Steppe::ContentType do
       expect(ct.params).to eq('version' => '1.0')
       expect(ct.quality).to eq(1.0)
       expect(ct.to_s).to eq('application/json; version=1.0')
+      expect(ct.media_type).to eq('application/json')
     end
 
     it 'parses quality factor, if available' do

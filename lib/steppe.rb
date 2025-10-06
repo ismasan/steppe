@@ -3,6 +3,7 @@
 require 'plumb'
 
 require_relative 'steppe/version'
+require_relative 'steppe/content_type'
 
 module Steppe
   class Error < StandardError; end
@@ -20,8 +21,8 @@ module Steppe
   end
 
   module ContentTypes
-    JSON = 'application/json'
-    TEXT = 'text/plain'
+    JSON = ContentType.parse('application/json')
+    TEXT = ContentType.parse('text/plain')
   end
 end
 

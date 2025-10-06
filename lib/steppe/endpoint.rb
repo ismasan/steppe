@@ -50,6 +50,10 @@ module Steppe
   # @see Responder
   # @see ResponderRegistry
   class Endpoint < Plumb::Pipeline
+    # These types are used in the respond method pattern matching.
+    MatchContentType = Types::String[ContentType::MIME_TYPE] | Types::Symbol
+    MatchStatus = Types::Integer | Types::Any[Range]
+
     # Fallback responder used when no matching responder is found for a status/content-type combination.
     # Returns a JSON error message indicating the missing responder configuration.
     FALLBACK_RESPONDER = Responder.new(statuses: (100..599), accepts: 'application/json') do |r|
@@ -94,7 +98,9 @@ module Steppe
     end
 
     # Internal step that validates request payload against a schema for a specific content type.
-    # Only validates if the request content type matches. Merges validated payload into result params.
+    # Only validates if the request content type matches. 
+    # Or if the request is form or multipart, which Rack::Request parses by default.
+    # Merges validated payload into result params.
     # Returns 422 Unprocessable Entity if validation fails.
     class PayloadValidator
       attr_reader :content_type, :payload_schema
@@ -108,9 +114,18 @@ module Steppe
       # @param conn [Result] The current result/connection object
       # @return [Result] Updated result with validated params or error response
       def call(conn)
-        return conn unless content_type == conn.request.content_type
+        # If form or multipart, treat as form data
+        data = nil
+        if conn.request.form_data?
+          data = Utils.deep_symbolize_keys(conn.request.POST)
+        elsif content_type.media_type == conn.request.media_type
+          # request.body was already parsed by parser associated to this media type
+          data = conn.request.body
+        else
+          return conn
+        end
 
-        result = payload_schema.resolve(conn.request.body)
+        result = payload_schema.resolve(data)
         conn = conn.copy(params: conn.params.merge(result.value))
         return conn if result.valid?
 
@@ -132,19 +147,19 @@ module Steppe
       end
 
       # Default JSON parser - parses body and symbolizes keys
-      parsers[ContentTypes::JSON] = proc do |body|
-        ::JSON.parse(body.read, symbolize_names: true)
+      parsers[ContentTypes::JSON.media_type] = proc do |request|
+        ::JSON.parse(request.body.read, symbolize_names: true)
       end
 
       # Default text parser - reads body as string
-      parsers[ContentTypes::TEXT] = proc do |body|
-        body.read
+      parsers[ContentTypes::TEXT.media_type] = proc do |request|
+        request.body.read
       end
 
       # Builds a parser for the given content type
       # @raise [MissingParserError] if no parser is registered for the content type
       def self.build(content_type)
-        parser = parsers[content_type]
+        parser = parsers[content_type.media_type]
         raise MissingParserError, "No parser for content type: #{content_type}" unless parser
 
         new(content_type, parser)
@@ -156,8 +171,10 @@ module Steppe
       end
 
       def call(conn)
+        return conn unless @content_type.media_type == conn.request.media_type
+
         if conn.request.body
-          body = @parser.call(conn.request.body)
+          body = @parser.call(conn.request)
           request = Rack::Request.new(conn.request.env.merge(::Rack::RACK_INPUT => body))
           return conn.copy(request:)
         end
@@ -261,19 +278,20 @@ module Steppe
         [ContentTypes::JSON, sc]
       in [Plumb::Composable => sc]
         [ContentTypes::JSON, sc]
-      in [String => content_type, Hash => sc]
+      in [Object => content_type, Hash => sc] if MatchContentType === content_type
         [content_type, sc]
-      in [String => content_type, Plumb::Composable => sc]
+      in [Object => content_type, Plumb::Composable => sc] if MatchContentType === content_type
         [content_type, sc]
       else
         raise ArgumentError, "Invalid arguments: #{args.inspect}. Expects [Hash] or [Plumb::Composable], and an optional content type."
       end
 
-      unless @body_parsers[ctype]
-        step BodyParser.build(ctype)
+      content_type = ContentType.parse(ctype)
+      unless @body_parsers[content_type]
+        step BodyParser.build(content_type)
         @body_parsers[ctype] = true
       end
-      step PayloadValidator.new(ctype, stp)
+      step PayloadValidator.new(content_type, stp)
     end
 
     # Gets or sets the HTTP verb for this endpoint.
@@ -434,21 +452,18 @@ module Steppe
     # @see Responder
     # @see ResponderRegistry
     # @see Serializer
-    Accepts = Types::String[ContentType::MIME_TYPE] | Types::Symbol
-    Status = Types::Integer | Types::Any[Range]
-
     def respond(*args, &)
       case args
       in [Responder => responder]
         @responders << responder
 
-      in [statuses] if Status === statuses
+      in [statuses] if MatchStatus === statuses
         @responders << Responder.new(statuses:, &)
 
-      in [statuses, accepts] if Status === statuses && Accepts === accepts
+      in [statuses, accepts] if MatchStatus === statuses && MatchContentType === accepts
         @responders << Responder.new(statuses:, accepts:, &)
 
-      in [statuses, accepts, Object => serializer] if Status === statuses && Accepts === accepts
+      in [statuses, accepts, Object => serializer] if MatchStatus === statuses && MatchContentType === accepts
         @responders << Responder.new(statuses:, accepts:, serializer:, &)
 
       in [Hash => kargs]
@@ -526,14 +541,15 @@ module Steppe
     # Handles multiple content types and merges schemas if they support the + operator.
     def merge_payload_schema(callable)
       content_type = callable.respond_to?(:content_type) ? callable.content_type : ContentTypes::JSON
+      media_type = content_type.media_type
 
-      existing = @payload_schemas[content_type]
+      existing = @payload_schemas[media_type]
       if existing && existing.respond_to?(:+)
         existing += callable.payload_schema
       else
         existing = callable.payload_schema
       end
-      @payload_schemas[content_type] = existing
+      @payload_schemas[media_type] = existing
     end
 
     # Sets the URL path pattern and extracts path parameters into the query schema.

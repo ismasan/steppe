@@ -50,9 +50,11 @@ module Steppe
 
     def qualified? = !(type == '*' && subtype == '*')
 
+    def media_type = "#{type}/#{subtype}"
+
     def to_s
       param_str = params.map { |k, v| "#{k}=#{v}" }.join('; ')
-      [ "#{type}/#{subtype}", param_str ].reject(&:empty?).join('; ')
+      [ media_type, param_str ].reject(&:empty?).join('; ')
     end
 
     def ==(other)

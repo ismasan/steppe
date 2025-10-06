@@ -142,6 +142,7 @@ RSpec.describe Steppe::Endpoint do
         e.payload_schema 'text/plain', Steppe::Types::String
         e.payload_schema 'text/plain', Steppe::Types::String
       end
+
       expect(endpoint.payload_schemas['application/json'].at_key(:age).metadata[:type]).to eq(Integer)
       expect(endpoint.payload_schemas['application/json'].at_key(:name).metadata[:type]).to eq(String)
       expect(endpoint.payload_schemas['application/json'].at_key(:title).metadata[:type]).to eq(String)
@@ -210,6 +211,34 @@ RSpec.describe Steppe::Endpoint do
           params: { name: 'Joe', age: 19 },
           errors: {}
         )
+      end
+    end
+
+    context 'with form-encoded payload' do
+      it 'uses the same payload schema' do
+        request = build_request(
+          '/users/1',
+          content_type: 'application/x-www-form-urlencoded',
+          accepts: 'application/json',
+          body: 'name=Joe&age=19'
+        )
+        result = endpoint.run(request)
+        expect(result.valid?).to be true
+        expect(result.response.status).to eq(200)
+        expect(result.params).to eq(name: 'Joe', age: 19)
+      end
+
+      it 'validates form params' do
+        request = build_request(
+          '/users/1',
+          content_type: 'application/x-www-form-urlencoded',
+          accepts: 'application/json',
+          body: 'name=Joe&age=16'
+        )
+        result = endpoint.run(request)
+        expect(result.response.status).to eq(422)
+        expect(result.params).to eq(name: 'Joe', age: 16)
+        expect(result.errors).to eq(age: 'Must be within 18..')
       end
     end
   end
