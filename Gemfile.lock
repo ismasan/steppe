@@ -1,18 +1,11 @@
 PATH
-  remote: ../plumb
-  specs:
-    plumb (0.0.14)
-      bigdecimal
-      concurrent-ruby
-
-PATH
   remote: .
   specs:
     steppe (0.1.0)
       mustermann
       mustermann-contrib
       papercraft
-      plumb
+      plumb (>= 0.0.14)
       rack (>= 3.0)
 
 GEM
@@ -49,6 +42,9 @@ GEM
       kramdown-parser-gfm (~> 1.1.0)
       rouge (~> 4.5.1)
       sirop (~> 0.9)
+    plumb (0.0.14)
+      bigdecimal
+      concurrent-ruby
     pp (0.6.2)
       prettyprint
     prettyprint (0.2.0)
@@ -113,7 +109,6 @@ PLATFORMS
 
 DEPENDENCIES
   debug
-  plumb!
   puma
   rack-cors
   rack-test (>= 2.1)
