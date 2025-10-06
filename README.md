@@ -378,7 +378,7 @@ openapi_spec = Steppe::OpenAPIVisitor.call(MyAPI)
 <img width="831" height="855" alt="CleanShot 2025-10-06 at 18 04 55" src="https://github.com/user-attachments/assets/fea61225-538b-4653-bdd0-9f8b21c8c389" />
 Using the [Swagger UI](https://swagger.io/tools/swagger-ui/) tool to view a Steppe API definition.
 
-### Integration with Rack/Sinatra
+### Integration with Sinatra
 
 Mount Steppe services in Rack-based applications:
 
@@ -386,7 +386,7 @@ Mount Steppe services in Rack-based applications:
 require 'sinatra/base'
 
 class App < Sinatra::Base
-  Service.endpoints.each do |endpoint|
+  MyService.endpoints.each do |endpoint|
     public_send(endpoint.verb, endpoint.path.to_templates.first) do
       resp = endpoint.run(request).response
       resp.finish
@@ -394,6 +394,38 @@ class App < Sinatra::Base
   end
 end
 ```
+
+### Mount in `Hanami::Router`
+
+The excellent and fast [Hanami::Router]() can be used as a standalone router for Steppe services. Or you can mount them into an existing Hanami app.
+
+```ruby
+# hanami_service.ru
+# run with
+#   bundle exec rackup ./hanami_service.ru
+require 'hanami/router'
+require 'rack/cors'
+
+app = Hanami::Router.new do
+  MyService.endpoints.each do |endpoint|
+    public_send(endpoint.verb, endpoint.path.to_s, to: endpoint.to_rack)
+  end
+end
+
+# Allowing all origins
+# to make Swagger UI work
+use Rack::Cors do
+  allow do
+    origins '*'
+    resource '*', headers: :any, methods: :any
+  end
+end
+
+run app
+
+```
+
+See `examples/hanami.ru`
 
 ### Custom Types
 

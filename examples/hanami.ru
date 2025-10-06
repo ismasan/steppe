@@ -16,6 +16,8 @@ app = Hanami::Router.new do
   end
 end
 
+# Allowing all origins
+# to make Swagger UI work
 use Rack::Cors do
   allow do
     origins '*'
