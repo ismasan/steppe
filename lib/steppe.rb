@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'plumb'
+require 'tempfile'
 
 require_relative 'steppe/version'
 require_relative 'steppe/content_type'
