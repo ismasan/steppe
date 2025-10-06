@@ -181,7 +181,8 @@ RSpec.describe Steppe::Endpoint do
       Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
         e.payload_schema(
           name: Steppe::Types::String.present,
-          age: Steppe::Types::Lax::Integer[18..]
+          age: Steppe::Types::Lax::Integer[18..],
+          file?: Steppe::Types::UploadedFile.with(type: 'text/plain')
         )
       end
     end
@@ -239,6 +240,77 @@ RSpec.describe Steppe::Endpoint do
         expect(result.response.status).to eq(422)
         expect(result.params).to eq(name: 'Joe', age: 16)
         expect(result.errors).to eq(age: 'Must be within 18..')
+      end
+
+      it 'parses multipart form params and wraps uploaded files' do
+        body = <<~MULTIPART
+          ------12345\r
+          Content-Disposition: form-data; name="name"\r
+          \r
+          Joe\r
+          ------12345\r
+          Content-Disposition: form-data; name="age"\r
+          \r
+          19\r
+          ------12345\r
+          Content-Disposition: form-data; name="file"; filename="example.txt"\r
+          Content-Type: text/plain\r
+          \r
+          This is the file content.\r
+          ------12345--\r
+        MULTIPART
+
+        request = build_request(
+          '/users/1',
+          content_type: 'multipart/form-data; boundary=----12345',
+          accepts: 'application/json',
+          body:
+        )
+
+        result = endpoint.run(request)
+        expect(result.response.status).to eq(200)
+        expect(result.params[:name]).to eq('Joe')
+        expect(result.params[:age]).to eq(19)
+        expect(result.params[:file]).to be_a(Steppe::Types::UploadedFile)
+        expect(result.params[:file].filename).to eq('example.txt')
+        expect(result.params[:file].type).to eq('text/plain')
+        expect(result.params[:file].tempfile.read).to eq('This is the file content.')
+      end
+
+      it 'validates uploaded files like any other Plumb type' do
+        # Pass unexpected file content type
+        body = <<~MULTIPART
+          ------12345\r
+          Content-Disposition: form-data; name="name"\r
+          \r
+          Joe\r
+          ------12345\r
+          Content-Disposition: form-data; name="age"\r
+          \r
+          19\r
+          ------12345\r
+          Content-Disposition: form-data; name="file"; filename="example.txt"\r
+          Content-Type: text/foo\r
+          \r
+          This is the file content.\r
+          ------12345--\r
+        MULTIPART
+
+        request = build_request(
+          '/users/1',
+          content_type: 'multipart/form-data; boundary=----12345',
+          accepts: 'application/json',
+          body:
+        )
+
+        result = endpoint.run(request)
+        expect(result.response.status).to eq(422)
+        expect(result.params[:name]).to eq('Joe')
+        expect(result.params[:age]).to eq(19)
+        expect(result.params[:file]).to be_a(Steppe::Types::UploadedFile)
+        expect(result.params[:file].filename).to eq('example.txt')
+        expect(result.params[:file].type).to eq('text/foo')
+        expect(result.errors[:file]).not_to be_nil
       end
     end
   end

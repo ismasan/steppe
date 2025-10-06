@@ -18,6 +18,14 @@ module Steppe
 
   module Types
     include Plumb::Types
+
+    UploadedFile = Data[
+      filename: String,
+      type: String,
+      name: String,
+      tempfile: ::Tempfile,
+      head: String
+    ]
   end
 
   module ContentTypes
