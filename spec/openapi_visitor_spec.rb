@@ -53,7 +53,8 @@ RSpec.describe Steppe::OpenAPIVisitor do
         attribute :name, String
         attribute :email, Steppe::Types::Email
       end
-      e.html do |c|
+      # This one should be ignored by OpenAPIVisitor
+      e.html(200) do |c|
       end
     end
 

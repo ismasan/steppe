@@ -76,6 +76,7 @@ module Steppe
       status = responder.statuses.size == 1 ? responder.statuses.first.to_s : "#{responder.statuses.first.to_s[0]}XX"
       status_prop = props[status]
       return props if status_prop
+      return props unless responder.content_type.subtype == 'json'
 
       status_prop = {}
       content = status_prop['content'] || {}
