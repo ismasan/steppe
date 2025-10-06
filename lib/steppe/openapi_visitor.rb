@@ -92,6 +92,10 @@ module Steppe
       props.merge(status => status_prop)
     end
 
+    on(:uploaded_file) do |_node, props|
+      props.merge('type' => 'string', 'format' => 'byte')
+    end
+
     PARAMETERS_IN = %i[query path].freeze
 
     def visit_parameters(schema)

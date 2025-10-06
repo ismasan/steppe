@@ -19,13 +19,15 @@ module Steppe
   module Types
     include Plumb::Types
 
-    UploadedFile = Data[
-      filename: String,
-      type: String,
-      name: String,
-      tempfile: ::Tempfile,
-      head: String
-    ]
+    class UploadedFile < Data
+      attribute :filename, String
+      attribute :type, String
+      attribute :name, String
+      attribute :tempfile, ::Tempfile
+      attribute :head, String
+
+      def self.node_name = :uploaded_file
+    end
   end
 
   module ContentTypes

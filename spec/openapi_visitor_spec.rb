@@ -30,7 +30,8 @@ RSpec.describe Steppe::OpenAPIVisitor do
       e.description = 'Test endpoint'
       e.payload_schema(
         name: Steppe::Types::String.desc('user name'),
-        email: Steppe::Types::Email.desc('user email')
+        email: Steppe::Types::Email.desc('user email'),
+        file?: Steppe::Types::UploadedFile.desc('user file')
       )
     end
 
@@ -38,9 +39,12 @@ RSpec.describe Steppe::OpenAPIVisitor do
     expect(data.dig('/users', 'post', 'requestBody', 'required')).to be(true)
     expect(data.dig('/users', 'post', 'requestBody', 'content', 'application/json')).to eq({
       'schema' => {
-        'properties' => { 'email' => { 'description' => 'user email', 'format' => 'email', 'type' => 'string' },
-          'name' => { 'description' => 'user name',
-            'type' => 'string' } }, 'required' => %w[name email], 'type' => 'object'
+        'properties' => { 
+          'email' => { 'description' => 'user email', 'format' => 'email', 'type' => 'string' },
+          'name' => { 'description' => 'user name', 'type' => 'string' },
+          'file' => { 'description' => 'user file', 'format' => 'byte', 'type' => 'string' },
+        }, 
+        'required' => %w[name email], 'type' => 'object'
       }
     })
   end
