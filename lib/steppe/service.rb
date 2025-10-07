@@ -54,10 +54,10 @@ module Steppe
       end
 
       # @param conn [Steppe::Result]
-      # @return [Steppe::Result] The result containing the OpenAPI spec in JSON format.
-      def call(conn)
+      # @return [String] JSON data
+      def render(conn)
         spec = Steppe::OpenAPIVisitor.from_request(@service, conn.request)
-        conn.continue JSON.dump(spec)
+        JSON.dump(spec)
       end
     end
 

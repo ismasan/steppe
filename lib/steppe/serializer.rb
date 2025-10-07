@@ -97,17 +97,6 @@ module Steppe
     class << self
       # Serialize an object using this serializer class.
       #
-      # This is a convenience method that delegates to Plumb's parse method.
-      #
-      # @param object [Object] The object to serialize
-      # @return [Hash] The serialized hash representation
-      # @example
-      #   UserSerializer.serialize(user_object)
-      #   # => { id: 1, name: "Alice", email: "alice@example.com" }
-      def serialize(object)
-        parse(object)
-      end
-
       # @private
       # Internal method that defines attribute reader methods.
       # Automatically creates methods that delegate to @object.attribute_name
@@ -117,6 +106,17 @@ module Steppe
         RUBY
       end
 
+      RenderError = Class.new(StandardError)
+
+      # @param conn [Result] The result object containing the value to serialize
+      # @return [String, nil] JSON string of serialized value or nil if no value
+      def render(conn)
+        result = call(conn)
+        raise RenderError, result.errors if result.invalid?
+
+        result.value ? JSON.dump(result.value) : nil
+      end
+
       # @private
       # Internal method called during endpoint processing to serialize results.
       #
@@ -124,8 +124,7 @@ module Steppe
       # @return [Result] New result with serialized value
       def call(conn)
         hash = new(conn).serialize
-        data = hash ? JSON.dump(hash) : nil
-        conn.copy(value: data)
+        conn.copy(value: hash)
       end
     end
 

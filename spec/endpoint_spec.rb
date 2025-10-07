@@ -39,6 +39,33 @@ RSpec.describe Steppe::Endpoint do
     expect(parse_body(result.response)).to eq(requested_at: now.iso8601, id: 1, name: 'Joe')
   end
 
+
+  class UserSerializer < Steppe::Serializer
+    attribute :id, Integer
+    attribute :name, String
+  end
+
+  specify 'nested serializers' do
+    user_struct = Data.define(:id, :name)
+
+    endpoint = Steppe::Endpoint.new(:test, :get, path: '/users') do |e|
+      e.step do |conn|
+        u1 = user_struct.new(1, 'Joe')
+        conn.continue [u1]
+      end
+
+      e.json do
+        attribute :users, [UserSerializer]
+
+        def users = object
+      end
+    end
+
+    request = build_request('/users')
+    result = endpoint.run(request)
+    expect(parse_body(result.response)).to eq(users: [{ id: 1, name: 'Joe' }])
+  end
+
   describe '#to_rack' do
     it 'returns a Rack-compatible app' do
       endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|

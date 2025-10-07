@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
+require 'papercraft'
 require 'steppe/content_type'
 require 'steppe/serializer'
-require 'steppe/papercraft_serializer'
 
 module Steppe
   # Handles response formatting for specific HTTP status codes and content types.
@@ -49,7 +49,7 @@ module Steppe
     end
 
     inline_serializers[:html] = proc do |block|
-      block.is_a?(Proc) ? PapercraftSerializer.new(block) : block
+      block
     end
 
     # @return [Range] The range of HTTP status codes this responder handles
@@ -127,7 +127,10 @@ module Steppe
 
       builder = self.class.inline_serializers.fetch(@content_type_subtype)
       @serializer = builder.call(serializer || block)
-      step @serializer
+      step do |conn|
+        output = @serializer.render(conn)
+        conn.copy(value: output)
+      end
     end
 
     # Compares two responders for equality.
