@@ -4,7 +4,7 @@ Steppe is a Ruby gem that provides a DSL for building REST APIs with an emphasis
 
 * Composability - Built on composable pipelines, allowing endpoints to be assembled from reusable, testable validation and processing
 steps
-* Type Safety & Validation - Uses the Plumb library to define schemas for query parameters and request bodies, ensuring data is
+* Type Safety & Validation - Define input schemas for query parameters and request bodies, ensuring data is
 validated and coerced before reaching business logic
 * Expandable API - start with a terse DSL for defining endpoints, and extend with custom steps as needed.
 * Self-Documentation - Automatically generates OpenAPI specifications from endpoint definitions, keeping documentation in sync with
@@ -429,7 +429,7 @@ See `examples/hanami.ru`
 
 ### Custom Types
 
-Define custom validation types using Plumb:
+Define custom validation types using [Plumb](https://github.com/ismasan/plumb):
 
 ```ruby
 module Types
