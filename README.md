@@ -256,7 +256,7 @@ api.post :upload, '/files' do |e|
 end
 ```
 
-### Custom Serializers
+### Named Serializers
 
 Define reusable serializers:
 
