@@ -207,13 +207,12 @@ end
 # CreateUser.payload_schema will be merged into the endpoint's own payload_schema
 e.step CreateUser
 
-# You can add further fields to the payload schema
+# You can add fields to the payload schema
+# The top-level endpoint schema will be the merge of both
 e.payload_schema(
   email: Types::Email.present
 )
 ```
-
-
 
 ### URL Parameters
 
@@ -244,7 +243,7 @@ Handle file uploads with the `UploadedFile` type:
 ```ruby
 api.post :upload, '/files' do |e|
   e.payload_schema(
-    file: Types::UploadedFile.with(type: 'text/plain')
+    file: Steppe::Types::UploadedFile.with(type: 'text/plain')
   )
 
   e.step do |conn|
