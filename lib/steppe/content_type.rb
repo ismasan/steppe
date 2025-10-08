@@ -3,7 +3,7 @@
 require 'rack/mime'
 
 module Steppe
-  class ContentType < Data.define(:type, :subtype, :params)
+  class ContentType
     TOKEN = /[!#$%&'*+\-.^_`|~0-9A-Z]+/i
     MIME_TYPE = /(?<type>#{TOKEN})\/(?<subtype>#{TOKEN})/
     QUOTED_STRING = /"(?:\\.|[^"\\])*"/
@@ -26,7 +26,7 @@ module Steppe
         params[key.downcase] = value
       end
 
-      new(m[:type].downcase, m[:subtype].downcase, params)
+      new(m[:type], m[:subtype], params)
     end
 
     def self.parse_accept(header)
@@ -44,13 +44,21 @@ module Steppe
           params[key.downcase] = value
         end
 
-        new(m[:type].downcase, m[:subtype].downcase, params)
+        new(m[:type], m[:subtype], params)
       end.compact.sort_by { |ct| -ct.quality }
     end
 
-    def qualified? = !(type == '*' && subtype == '*')
+    attr_reader :type, :subtype, :params, :media_type
 
-    def media_type = "#{type}/#{subtype}"
+    def initialize(type, subtype, params)
+      @type = type.downcase
+      @subtype = subtype.downcase
+      @params = params
+      @media_type = "#{type}/#{subtype}"
+      freeze
+    end
+
+    def qualified? = !(type == '*' && subtype == '*')
 
     def to_s
       param_str = params.map { |k, v| "#{k}=#{v}" }.join('; ')
