@@ -364,7 +364,6 @@ MyAPI = Steppe::Service.new do |api|
 end
 ```
 
-
 Or use the `OpenAPIVisitor` directly
 
 ```ruby
@@ -406,9 +405,12 @@ The excellent and fast [Hanami::Router]() can be used as a standalone router for
 require 'hanami/router'
 require 'rack/cors'
 
+app = MyService.route_with(Hanami::Router.new)
+
+# Or mount within a router block
 app = Hanami::Router.new do
-  MyService.endpoints.each do |endpoint|
-    public_send(endpoint.verb, endpoint.path.to_s, to: endpoint.to_rack)
+  scope '/api' do
+    MyService.route_with(self)
   end
 end
 
@@ -422,7 +424,6 @@ use Rack::Cors do
 end
 
 run app
-
 ```
 
 See `examples/hanami.ru`

@@ -70,6 +70,29 @@ module Steppe
       end
     end
 
+    # Registers all defined endpoints with the given router.
+    # The router is expected to respond to HTTP verb methods (e.g., get, post).
+    # ie. router.get '/users/:id', to: rack_endpoint
+    # @example
+    #   app = MyService.route_with(Hanami::Router.new)
+    #   run app
+    #
+    # @example
+    #   app = Hanami::Router.new do
+    #     scope '/api' do
+    #       MyService.route_with(self)
+    #     end
+    #   end
+    #
+    # @param router [Object] A router instance that responds to HTTP verb methods (e.g., get, post).
+    # @return [Object] The router with registered endpoints.
+    def route_with(router)
+      endpoints.each do |endpoint|
+        router.public_send(endpoint.verb, endpoint.path.to_s, to: endpoint.to_rack)
+      end
+      router
+    end
+
     VERBS.each do |verb|
       define_method(verb) do |name, path, &block|
         @lookup[name] = Endpoint.new(name, verb, path:, &block)

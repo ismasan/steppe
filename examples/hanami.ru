@@ -10,11 +10,12 @@ require 'hanami/router'
 require 'rack/cors'
 require_relative './service'
 
-app = Hanami::Router.new do
-  Service.endpoints.each do |endpoint|
-    public_send(endpoint.verb, endpoint.path.to_s, to: endpoint.to_rack)
-  end
-end
+app = Service.route_with(Hanami::Router.new)
+# app = Hanami::Router.new do
+#   scope '/api' do
+#     Service.route_with(self)
+#   end
+# end
 
 # Allowing all origins
 # to make Swagger UI work
