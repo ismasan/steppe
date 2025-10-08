@@ -144,6 +144,8 @@ module Steppe
       @object = result.value
     end
 
+    def conn = result
+
     # Serialize the object to a hash using defined attributes.
     #
     # Iterates through all defined attributes, calls the corresponding method
