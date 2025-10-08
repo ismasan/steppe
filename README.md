@@ -388,7 +388,7 @@ openapi_spec = Steppe::OpenAPIVisitor.call(MyAPI)
 ```
 
 <img width="831" height="855" alt="CleanShot 2025-10-06 at 18 04 55" src="https://github.com/user-attachments/assets/fea61225-538b-4653-bdd0-9f8b21c8c389" />
-Using the [Swagger UI](https://swagger.io/tools/swagger-ui/) tool to view a Steppe API definition.
+Using the (Swagger UI)[https://swagger.io/tools/swagger-ui/] tool to view a Steppe API definition.
 
 ### Integration with Sinatra
 
