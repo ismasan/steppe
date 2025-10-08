@@ -271,6 +271,20 @@ end
 e.json 200, UserSerializer
 ```
 
+You can also compose serializers together:
+
+```ruby
+class UserListSerializer < Steppe::Serializer
+  attribute :page, Types::Integer.example(1)
+  attribute :users, [UserSerializer]
+
+  def page = conn.params[:page] || 1
+  def users = object
+end
+```
+
+Serializers are based on [Plumb's Data structs](PostSerializer).
+
 ### Multiple Response Formats
 
 Support multiple content types:
