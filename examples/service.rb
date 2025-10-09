@@ -3,29 +3,46 @@
 require 'steppe'
 
 class User
-  Record = Data.define(:id, :name, :age)
+  Record = Data.define(:id, :name, :age, :email, :address)
 
   class << self
     def data
       @data ||= [
-        Record.new(1, 'Alice', 30),
-        Record.new(2, 'Bob', 25),
-        Record.new(3, 'Bill', 20)
+        Record.new(1, 'Alice', 30, 'alice@server.com', '123 Great St'),
+        Record.new(2, 'Bob', 25, 'bob@server.com', '23 Long Ave.'),
+        Record.new(3, 'Bill', 20, 'bill@server.com', "Bill's Mansion")
       ]
     end
 
     def filter_by_name(name)
       return data unless name
 
-      data.select { |u| u.name.downcase.start_with?(name) }
+      data.select { |u| u.name.downcase.start_with?(name.downcase) }
     end
 
     def find(id)
       data.find { |u| u.id == id }
     end
 
+    def update(id, attrs)
+      attrs.delete(:id)
+      user = find(id)
+      return unless user
+
+      idx = data.index(user)
+      user = user.with(**attrs)
+      data[idx] = user
+      user
+    end
+
     def create(attrs)
-      rec = Record.new(id: data.size + 1, name: attrs[:name], age: attrs[:age])
+      rec = Record.new(
+        id: data.size + 1, 
+        name: attrs[:name], 
+        age: attrs[:age],
+        email: attrs[:email],
+        address: attrs[:address]
+      )
       data << rec
       rec
     end
@@ -46,6 +63,9 @@ end
 class UserSerializer < Steppe::Serializer
   attribute :id, Types::Integer.example(1)
   attribute :name, Types::String.example('Alice')
+  attribute :age, Types::Integer.example('34')
+  attribute :email, Types::String.example('alice@server.com')
+  attribute? :address, String
 end
 
 class HashTokenStore
@@ -106,7 +126,7 @@ Service = Steppe::Service.new do |api|
 
     # Validate and coerce URL parameters
     e.query_schema(
-      q?: Types::DowncaseString.desc('search by name'),
+      q?: Types::DowncaseString.desc('search by name, supports partial matches').example('Bil, Jo'),
       cat?: Types::UserCategory
     )
 
@@ -162,20 +182,35 @@ Service = Steppe::Service.new do |api|
     end
   end
 
+  UserName = Plumb::Types::String.desc('User name').example('Alice').present
+  UserAge = Steppe::Types::Lax::Integer[18..]
+  UserEmail = Steppe::Types::Email.desc('User email').example('alice@email.com')
+  UserAddress = Steppe::Types::String.desc('User address').example('123 Great St')
+
   # A Standalone action class
   # with its own schema
+  # FIXME: classes with their own payload_schema
+  # don't automatically register body parses, nor actually validate the schema
+  # because it's up to them to validate the params
   class UpdateUser
+    QUERY_SCHEMA = Plumb::Types::Hash[id: Steppe::Types::Lax::Integer]
     SCHEMA = Plumb::Types::Hash[
-      name: Steppe::Types::String.present,
-      age: Steppe::Types::Lax::Integer[18..]
+      name?: UserName,
+      age?: UserAge,
+      email?: UserEmail,
+      address?: UserAddress
     ]
 
+    def self.query_schema = QUERY_SCHEMA
     def self.payload_schema = SCHEMA
 
     def self.call(conn)
-      # Validate payload, pass valid params to instance, etc
-      # new(conn).call
-      conn
+      p conn.params.inspect
+      return conn
+      user = User.update(conn.params[:id], conn.params)
+      return conn.invalid(errors: { id: 'User not found' }) unless user
+
+      conn.valid user
     end
   end
 
@@ -196,12 +231,27 @@ Service = Steppe::Service.new do |api|
     e.description = 'Update a user'
     e.tags = %w[users]
 
+    # FIXME: :id should be defined in query_schema
+    # even without an explicit query_schema definition
+    e.query_schema(
+      id: Steppe::Types::Lax::Integer.desc('User ID')
+    )
+
     # Endpoint will consolidate schemas from steps
     # that respond to .payload_schema
-    e.step UpdateUser
-    e.step ProcessFile
+    # e.step UpdateUser
+    e.payload_schema(
+      name?: UserName,
+      age?: UserAge,
+      email?: UserEmail,
+      address?: UserAddress
+    )
+    e.step do |conn|
+      user = User.update(conn.params[:id], conn.params)
+      user ? conn.valid(user) : conn.invalid(errors: { id: 'User not found' })
+    end
 
-
+    e.json 200, UserSerializer
     # e.payload_schema(
     #   name: Steppe::Types::String.present,
     #   age: Steppe::Types::Lax::Integer[18..],
@@ -210,7 +260,7 @@ Service = Steppe::Service.new do |api|
   end
 
   api.get :user, '/users/:id' do |e|
-    e.description = 'Fetch a user'
+    e.description = 'Fetch information for a user, by ID'
     e.tags = %w[users]
     e.query_schema(
       id: Types::Lax::Integer.desc('User ID')
@@ -250,16 +300,15 @@ Service = Steppe::Service.new do |api|
     # Validate request BODY payload
     # request body is parsed at this point in the pipeline
     e.payload_schema(
-      user: {
-        name: Types::String.desc('User name').example('Alice'),
-        email: Types::Email.desc('User email').example('alice@server.com'),
-        age: Types::Lax::Integer.desc('User age').example(30)
-      }
+      name: UserName,
+      age: UserAge,
+      email: UserEmail,
+      address?: UserAddress
     )
 
     # Create a user, only if params above are valid
     e.step do |conn|
-      user = User.create(conn.params[:user])
+      user = User.create(conn.params)
       conn.respond_with(201).valid user
     end
 
