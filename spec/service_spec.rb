@@ -33,7 +33,7 @@ RSpec.describe Steppe::Service do
     end
   end
 
-  specify do
+  specify 'properties' do
     expect(service.title).to eq('Users')
     expect(service.description).to eq('Users service')
     expect(service.version).to eq('1.0.0')

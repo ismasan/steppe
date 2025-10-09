@@ -106,17 +106,17 @@ module Steppe
       end
       specs.map do |name, type|
         spec = visit(type)
-        # Here we should recursively visit the type
-        # to extract metadata, etc.
-        meta = type.metadata.reduce({}) { |m, (k, v)| m.merge(k.to_s => v.to_s.downcase) }
+
+        ins = spec.delete('in')&.to_s
 
         {
           'name' => name,
-          'in' => meta['in'],
-          'description' => meta['description'],
-          'required' => (meta['in'] == 'path'),
-          'schema' => spec.except('in')
-        }
+          'in' => ins,
+          'description' => spec.delete('description'),
+          'example' => spec.delete('example'),
+          'required' => (ins == 'path'),
+          'schema' => spec.except('in', 'desc', 'options')
+        }.compact
       end
     end
 

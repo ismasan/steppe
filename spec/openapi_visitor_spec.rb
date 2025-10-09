@@ -112,6 +112,9 @@ RSpec.describe Steppe::OpenAPIVisitor do
         end
 
         s.put :update_user, '/users/:id' do |e|
+          e.query_schema(
+            id: Steppe::Types::Lax::Integer.desc('user id').example(1)
+          )
           e.description = 'Update user'
         end
 
@@ -136,6 +139,13 @@ RSpec.describe Steppe::OpenAPIVisitor do
       expect(data['tags'][0]['name']).to eq('users')
       expect(data['tags'][0]['description']).to eq('Users operations')
       expect(data['tags'][0]['externalDocs']['url']).to eq('https://example.com/docs/users')
+      id_param = data['paths'].values.last['put']['parameters'].first
+      expect(id_param['name']).to eq('id')
+      expect(id_param['in']).to eq('path')
+      expect(id_param['required']).to be(true)
+      expect(id_param['description']).to eq('user id')
+      expect(id_param['schema']['type']).to eq('integer')
+      expect(id_param['example']).to eq(1)
     end
   end
 
