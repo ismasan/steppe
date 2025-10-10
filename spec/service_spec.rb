@@ -73,6 +73,25 @@ RSpec.describe Steppe::Service do
     expect(spec.keys).to match_array(%i[openapi info servers tags paths])
   end
 
+  describe '#security_scheme' do
+    it 'allows valid interface' do
+      store = Steppe::Auth::HashTokenStore.new({})
+      scheme = Steppe::Auth::Bearer.new('test', store:)
+      endpoint = described_class.new do |api|
+        api.security_scheme scheme
+      end
+      expect(endpoint.security_schemes['test']).to eq(scheme)
+    end
+
+    it 'blows up on unknown interface' do
+      expect {
+        endpoint = described_class.new do |api|
+          api.security_scheme Object.new
+        end
+      }.to raise_error
+    end
+  end
+
   context 'handling request with an auth-protected endpoint' do
     it 'forbids access if no bearer token given' do
       request = build_request('/users')

@@ -566,7 +566,6 @@ module Steppe
     # Hook called when adding steps to the pipeline.
     # Automatically merges query and payload schemas from composable steps.
     def prepare_step(callable)
-      p callable if callable.respond_to?(:query_schema)
       merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)
       merge_payload_schema(callable) if callable.respond_to?(:payload_schema)
       callable
