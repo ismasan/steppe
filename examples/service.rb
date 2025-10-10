@@ -101,7 +101,7 @@ Service = Steppe::Service.new do |api|
   api.title = 'Users API'
   api.description = 'API for managing users'
   api.server(
-    url: 'http://localhost:4567',
+    url: 'http://localhost:9292',
     description: 'prod server'
   )
   api.tag(
@@ -109,8 +109,6 @@ Service = Steppe::Service.new do |api|
     description: 'Users operations',
     external_docs: 'https://example.com/docs/users'
   )
-
-  # api.security_scheme(:bootic_auth, bootic)
 
   api.specs('/')
 
@@ -231,8 +229,6 @@ Service = Steppe::Service.new do |api|
     e.description = 'Update a user'
     e.tags = %w[users]
 
-    # FIXME: :id should be defined in query_schema
-    # even without an explicit query_schema definition
     e.query_schema(
       id: Steppe::Types::Lax::Integer.desc('User ID')
     )
@@ -252,6 +248,7 @@ Service = Steppe::Service.new do |api|
     end
 
     e.json 200, UserSerializer
+
     # e.payload_schema(
     #   name: Steppe::Types::String.present,
     #   age: Steppe::Types::Lax::Integer[18..],
