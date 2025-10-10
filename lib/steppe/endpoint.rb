@@ -175,8 +175,11 @@ module Steppe
 
         if conn.request.body
           body = @parser.call(conn.request)
-          request = Rack::Request.new(conn.request.env.merge(::Rack::RACK_INPUT => body))
-          return conn.copy(request:)
+          # Maybe here we can just mutate the request?
+          conn.request.env[::Rack::RACK_INPUT] = body
+          return conn
+          # request = Steppe::Request.new(conn.request.env.merge(::Rack::RACK_INPUT => body))
+          # return conn.copy(request:)
         end
         conn
       rescue StandardError => e
@@ -184,7 +187,7 @@ module Steppe
       end
     end
 
-    attr_reader :rel_name, :payload_schemas, :responders
+    attr_reader :rel_name, :payload_schemas, :responders, :path
     attr_accessor :description, :tags
 
     # Creates a new endpoint instance.
@@ -200,9 +203,10 @@ module Steppe
     #     e.respond 200, :json, UserSerializer
     #   end
     def initialize(rel_name, verb, path: '/', &)
+      # Do not setup with block yet
+      super(freeze_after: false, &nil)
       @rel_name = rel_name
       @verb = verb
-      @path = Mustermann.new('')
       @responders = ResponderRegistry.new
       @query_schema = Types::Hash
       @payload_schemas = {}
@@ -210,8 +214,12 @@ module Steppe
       @description = 'An endpoint'
       @specced = true
       @tags = []
+
+      # This registers a first query_schema
+      # and a QueryValidator step
       self.path = path
-      super(freeze_after: false, &)
+
+      configure(&) if block_given?
 
       # Register default responders for common status codes
       respond 204, :json
@@ -320,31 +328,6 @@ module Steppe
     def verb(vrb = nil)
       @verb = vrb if vrb
       @verb
-    end
-
-    # Gets or sets the URL path pattern for this endpoint.
-    #
-    # Path patterns support Mustermann syntax with named parameters (e.g., '/users/:id').
-    # When setting a path, automatically extracts path parameters and merges them into
-    # the query schema.
-    #
-    # @overload path(path)
-    #   Sets the URL path pattern
-    #   @param path [String] URL path pattern with optional named parameters
-    #   @return [Mustermann::Pattern] The compiled path pattern
-    #   @example
-    #     path '/users/:id'
-    #     path '/posts/:post_id/comments/:id'
-    #
-    # @overload path
-    #   Gets the current path pattern
-    #   @return [Mustermann::Pattern] Current path pattern
-    def path(pth = nil)
-      if pth
-        @path = Mustermann.new(pth)
-        merge_path_params_into_params_schema!
-      end
-      @path
     end
 
     # Convenience method to define a JSON responder.
@@ -521,6 +504,9 @@ module Steppe
     # @param conn [Result] Initial result/connection object
     # @return [Result] Final result with serialized response
     def call(conn)
+      known_query_names = query_schema._schema.keys.map(&:to_sym)
+      known_query = conn.request.steppe_url_params.slice(*known_query_names)
+      conn.request.set_url_params!(known_query)
       conn = super(conn)
       accepts = conn.request.get_header('HTTP_ACCEPT') || ContentTypes::JSON
       responder = responders.resolve(conn.response.status, accepts) || FALLBACK_RESPONDER
@@ -530,11 +516,31 @@ module Steppe
       responder.call(conn.valid)
     end
 
+    # Sets the URL path pattern and extracts path parameters into the query schema.
+    # Path parameters are marked with metadata(in: :path) for OpenAPI documentation.
+    # @param pt [String] URL path with tokens
+    # @return [Mustermann]
+    def path=(pt)
+      @path = Mustermann.new(pt)
+      sc = @path.names.each_with_object({}) do |name, h| 
+        name = name.to_sym
+        field = @query_schema.at_key(name) || Steppe::Types::String
+        # field = field.metadata(in: :path)
+        h[name] = field
+      end
+      # Setup a new query validator
+      # and merge into @query_schema
+      query_schema(sc)
+
+      @path
+    end
+
     private
 
     # Hook called when adding steps to the pipeline.
     # Automatically merges query and payload schemas from composable steps.
     def prepare_step(callable)
+      p callable if callable.respond_to?(:query_schema)
       merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)
       merge_payload_schema(callable) if callable.respond_to?(:payload_schema)
       callable
@@ -563,20 +569,6 @@ module Steppe
         existing = callable.payload_schema
       end
       @payload_schemas[media_type] = existing
-    end
-
-    # Sets the URL path pattern and extracts path parameters into the query schema.
-    # Path parameters are marked with metadata(in: :path) for OpenAPI documentation.
-    def path=(pt)
-      @path = Mustermann.new(pt)
-      sc = @path.names.each_with_object({}) do |name, h| 
-        name = name.to_sym
-        field = @query_schema.at_key(name) || Steppe::Types::String
-        field = field.metadata(in: :path)
-        h[name] = field
-      end
-      @query_schema += sc
-      @path
     end
   end
 end

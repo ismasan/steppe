@@ -13,9 +13,15 @@ RSpec.describe Steppe::Endpoint do
       e.query_schema(
         id: Steppe::Types::Lax::Integer
       )
+
       e.step do |conn|
         conn.valid(user_class.new(conn.params[:id], 'Joe'))
       end
+
+      # Add to query schema
+      e.query_schema(
+        q?: String
+      )
 
       # Compact syntax. Registers a responder
       # for JSON, (200..299) statuses with an
@@ -32,13 +38,21 @@ RSpec.describe Steppe::Endpoint do
     now = Time.now
     allow(Time).to receive(:now).and_return(now)
 
-    request = build_request('/users/1', query: { id: '1' })
+    request = build_request('/users/1', query: { id: '1', q: 'bill', nope: 'no' })
     result = endpoint.run(request)
+    expect(result.params).to eq(id: 1, q: 'bill')
     expect(result.response.status).to eq(200)
     expect(result.response.content_type).to eq('application/json')
     expect(parse_body(result.response)).to eq(requested_at: now.iso8601, id: 1, name: 'Joe')
   end
 
+  specify 'auto registering query_schema from path params' do
+    endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id')
+
+    request = build_request('/users/1', query: { id: '1' })
+    conn = endpoint.run(request)
+    expect(conn.params[:id]).to eq '1'
+  end
 
   class UserSerializer < Steppe::Serializer
     attribute :id, Integer
@@ -235,10 +249,14 @@ RSpec.describe Steppe::Endpoint do
 
     context 'with invalid request body params' do
       it 'sets status to 422 and uses built-in errors serializer' do
-        request = build_request('/users/1', query: { id: '1' }, body: '{"name": "Joe", "age": "17"}')
+        request = build_request('/users', query: { q: '1' }, body: '{"name": "Joe", "age": "17"}')
         result = endpoint.run(request)
         expect(result.response.status).to eq(422)
         expect(result.response.content_type).to eq('application/json')
+        # The request has q: 1
+        # but the path and the query_schema don't declare the param
+        # conn.param still includes it, but it doesn't validate it
+        # or coerce it in any way
         expect(parse_body(result.response)).to eq(
           http: { status: 422 },
           params: { name: 'Joe', age: 17 },

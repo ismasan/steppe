@@ -92,8 +92,9 @@ module Steppe
       @accepts = ContentType.parse(accepts)
       @content_type = content_type ? ContentType.parse(content_type) : @accepts
       @content_type_subtype = @content_type.subtype.to_sym
-      super(&)
+      super(freeze_after: false, &)
       serialize(serializer) if serializer
+      freeze
     end
 
     # Registers a serializer for this responder.

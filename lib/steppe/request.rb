@@ -14,5 +14,9 @@ module Steppe
         Utils.deep_symbolize_keys(params).merge(Utils.deep_symbolize_keys(upstream_params))
       end
     end
+
+    def set_url_params!(params)
+      @steppe_url_params = params
+    end
   end
 end
