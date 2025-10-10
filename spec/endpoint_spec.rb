@@ -189,27 +189,6 @@ RSpec.describe Steppe::Endpoint do
     end
   end
 
-  describe '#payload_schema' do
-    it 'adds schemas to #payload_schemas' do
-      endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
-        # Payload schemas are merged
-        e.payload_schema(
-          name: String,
-          age: Integer
-        )
-        e.payload_schema(title: String)
-        # Non-mergeable types are just replaced
-        e.payload_schema 'text/plain', Steppe::Types::String
-        e.payload_schema 'text/plain', Steppe::Types::String
-      end
-
-      expect(endpoint.payload_schemas['application/json'].at_key(:age).metadata[:type]).to eq(Integer)
-      expect(endpoint.payload_schemas['application/json'].at_key(:name).metadata[:type]).to eq(String)
-      expect(endpoint.payload_schemas['application/json'].at_key(:title).metadata[:type]).to eq(String)
-      expect(endpoint.payload_schemas['text/plain']).to eq(Steppe::Types::String)
-    end
-  end
-
   describe 'validating query params' do
     subject(:endpoint) do
       Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
@@ -236,12 +215,37 @@ RSpec.describe Steppe::Endpoint do
     end
   end
 
+  describe '#payload_schema' do
+    it 'adds schemas to #payload_schemas' do
+      endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+        # Payload schemas are merged
+        e.payload_schema(
+          name: String,
+          age: Integer
+        )
+        e.payload_schema(title: String)
+        # Non-mergeable types are just replaced
+        e.payload_schema 'text/plain', Steppe::Types::String
+        e.payload_schema 'text/plain', Steppe::Types::String
+      end
+
+      expect(endpoint.payload_schemas['application/json'].at_key(:age).metadata[:type]).to eq(Integer)
+      expect(endpoint.payload_schemas['application/json'].at_key(:name).metadata[:type]).to eq(String)
+      expect(endpoint.payload_schemas['application/json'].at_key(:title).metadata[:type]).to eq(String)
+      expect(endpoint.payload_schemas['text/plain']).to eq(Steppe::Types::String)
+    end
+  end
+
   describe 'validating payload params' do
     subject(:endpoint) do
       Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
         e.payload_schema(
           name: Steppe::Types::String.present,
-          age: Steppe::Types::Lax::Integer[18..],
+          age: Steppe::Types::Lax::Integer[18..]
+        )
+        # Add multiple
+        e.payload_schema(
+          address?: String,
           file?: Steppe::Types::UploadedFile.with(type: 'text/plain')
         )
       end
@@ -255,8 +259,6 @@ RSpec.describe Steppe::Endpoint do
         expect(result.response.content_type).to eq('application/json')
         # The request has q: 1
         # but the path and the query_schema don't declare the param
-        # conn.param still includes it, but it doesn't validate it
-        # or coerce it in any way
         expect(parse_body(result.response)).to eq(
           http: { status: 422 },
           params: { name: 'Joe', age: 17 },
@@ -267,15 +269,25 @@ RSpec.describe Steppe::Endpoint do
 
     context 'with valid params and no explicit responder' do
       it 'uses default responder/serializer' do
-        request = build_request('/users/1', body: '{"name": "Joe", "age": "19"}')
+        request = build_request('/users/1', body: '{"name": "Joe", "age": "19", "address": "Big House"}')
         result = endpoint.run(request)
         expect(result.valid?).to be true
         expect(result.response.status).to eq(200)
         expect(parse_body(result.response)).to eq(
           http: { status: 200 },
-          params: { name: 'Joe', age: 19 },
+          params: { name: 'Joe', age: 19, address: 'Big House' },
           errors: {}
         )
+      end
+
+      context 'with params not declared in the payload schemas' do
+        it 'excludes them from #params' do
+          request = build_request('/users/1', body: '{"name": "Joe", "age": "19", "nope": "no!", "address": "Big House"}')
+          result = endpoint.run(request)
+          expect(result.valid?).to be true
+          expect(result.response.status).to eq(200)
+          expect(result.params).to eq(name: 'Joe', age: 19, address: 'Big House')
+        end
       end
     end
 
