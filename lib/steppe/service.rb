@@ -49,44 +49,15 @@ module Steppe
       self
     end
 
-    HashTokenStoreInterface = Types::Hash[String, Types::Array[String]]
-    TokenStoreInterface = Types::Interface[:get]
-
-    class HashTokenStore
-      class AccessToken < Data.define(:scopes)
-        def allows?(required_scopes)
-          (scopes & required_scopes).any?
-        end
-      end
-
-      def self.wrap(store)
-        case store
-        when HashTokenStoreInterface
-          new(store)
-        when TokenStoreInterface
-          store
-        else
-          raise ArgumentError, "expected a TokenStore interface #{TokenStoreInterface}, but got #{store.inspect}"
-        end
-      end
-
-      def initialize(hash)
-        @lookup = hash.transform_values { |scopes| AccessToken.new(scopes) }
-      end
-
-      def get(token)
-        @lookup[token]
-      end
-    end
-
     # Security schemes
     # https://swagger.io/docs/specification/v3_0/authentication/
     def bearer_auth(name, store: {}, format: 'string')
-      store = HashTokenStore.wrap(store)
+      store = Auth::HashTokenStore.wrap(store)
       security_scheme Auth::Bearer.new(name, store:, format:)
     end
 
     def security_scheme(scheme)
+      scheme => Auth::SecuritySchemeInterface
       @security_schemes[scheme.name] = scheme
       self
     end

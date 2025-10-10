@@ -88,7 +88,7 @@ RSpec.describe Steppe::Service do
         endpoint = described_class.new do |api|
           api.security_scheme Object.new
         end
-      }.to raise_error
+      }.to raise_error(NoMatchingPatternError)
     end
   end
 

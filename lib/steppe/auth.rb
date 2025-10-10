@@ -2,6 +2,8 @@
 
 module Steppe
   module Auth
+    SecuritySchemeInterface = Types::Interface[:name, :scheme, :type, :handle]
+
     class Bearer
       HEADER = 'HTTP_AUTHORIZATION'
 
@@ -30,6 +32,36 @@ module Steppe
         return conn if access_token.allows?(required_scopes)
 
         conn.respond_with(403).halt
+      end
+    end
+
+    HashTokenStoreInterface = Types::Hash[String, Types::Array[String]]
+    TokenStoreInterface = Types::Interface[:get]
+
+    class HashTokenStore
+      class AccessToken < Data.define(:scopes)
+        def allows?(required_scopes)
+          (scopes & required_scopes).any?
+        end
+      end
+
+      def self.wrap(store)
+        case store
+        when HashTokenStoreInterface
+          new(store)
+        when TokenStoreInterface
+          store
+        else
+          raise ArgumentError, "expected a TokenStore interface #{TokenStoreInterface}, but got #{store.inspect}"
+        end
+      end
+
+      def initialize(hash)
+        @lookup = hash.transform_values { |scopes| AccessToken.new(scopes) }
+      end
+
+      def get(token)
+        @lookup[token]
       end
     end
   end
