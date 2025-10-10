@@ -202,9 +202,10 @@ module Steppe
     #     e.step { |result| result.continue(data: User.find(result.params[:id])) }
     #     e.respond 200, :json, UserSerializer
     #   end
-    def initialize(rel_name, verb, path: '/', &)
+    def initialize(service, rel_name, verb, path: '/', &)
       # Do not setup with block yet
       super(freeze_after: false, &nil)
+      @service = service
       @rel_name = rel_name
       @verb = verb
       @responders = ResponderRegistry.new
@@ -227,8 +228,7 @@ module Steppe
       respond 200..299, :json, DefaultEntitySerializer
       # TODO: match any content type
       # respond 304, '*/*'
-      respond 404, :json, DefaultEntitySerializer
-      respond 422, :json, DefaultEntitySerializer
+      respond 401..422, :json, DefaultEntitySerializer
       freeze
     end
 
@@ -246,6 +246,30 @@ module Steppe
 
     # Node name for OpenAPI documentation
     def node_name = :endpoint
+
+    # TODO: endpoints should support a #header_schema
+    # which is also generated as OpenAPI {in: 'header'} parameters
+    # security schemes can then respond to #header_schema
+    # Ex. Bearer scheme should require an 'Authorization' header by default.
+    class SecurityStep
+      def initialize(scheme, scopes: [])
+        @scheme = scheme
+        @scopes = scopes
+      end
+
+      def call(conn)
+        @scheme.handle(conn, @scopes) 
+      end
+    end
+
+    # What security schemes to use
+    # schemes must be registered in the parent service
+    # @param scheme_name [String]
+    # @param scopes [Array<String>]
+    def security(scheme_name, scopes)
+      scheme = service.security_schemes.fetch(scheme_name)
+      step SecurityStep.new(scheme, scopes:)
+    end
 
     # Defines or returns the query parameter validation schema.
     #
@@ -536,6 +560,8 @@ module Steppe
     end
 
     private
+
+    attr_reader :service
 
     # Hook called when adding steps to the pipeline.
     # Automatically merges query and payload schemas from composable steps.

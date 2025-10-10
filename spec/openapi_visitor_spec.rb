@@ -3,8 +3,12 @@
 require 'rack'
 
 RSpec.describe Steppe::OpenAPIVisitor do
+  let(:service) do
+    Steppe::Service.new
+  end
+
   specify 'request parameters schema' do
-    endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+    endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
       e.description = 'Test endpoint'
       e.query_schema(
         id: Steppe::Types::Lax::Integer.desc('user id'),
@@ -26,7 +30,7 @@ RSpec.describe Steppe::OpenAPIVisitor do
   end
 
   specify 'request parameters schema' do
-    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+    endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
       e.description = 'Test endpoint'
       e.payload_schema(
         name: Steppe::Types::String.desc('user name'),
@@ -50,7 +54,7 @@ RSpec.describe Steppe::OpenAPIVisitor do
   end
 
   specify 'response body schema' do
-    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+    endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
       e.description = 'Test endpoint'
       e.tags = %w[users]
       e.json do

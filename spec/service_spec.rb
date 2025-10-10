@@ -9,13 +9,23 @@ RSpec.describe Steppe::Service do
       api.description = 'Users service'
       api.version = '1.0.0'
 
+      api.bearer_auth(
+        'BearerAuth', 
+        store: {
+          'readtoken' => %w[all:read one:read],
+          'writetoken' => %w[all:write one:write]
+        }
+      )
+
       api.specs('/schemas')
 
       api.get :users, '/users' do |e|
+        e.security 'BearerAuth', ['all:read']
         e.description = 'List users'
       end
 
       api.post :create_user, '/users' do |e|
+        e.security 'BearerAuth', ['all:write']
         e.description = 'Create user'
       end
 
@@ -30,6 +40,16 @@ RSpec.describe Steppe::Service do
       api.delete :delete_user, '/users/:id' do |e|
         e.description = 'Delete user'
       end
+    end
+  end
+
+  let(:token_store) do
+    Class.new do
+      def initialize(tokens)
+        @tokens = tokens
+      end
+
+      def get(token) = @tokens.fetch(token)
     end
   end
 
@@ -51,5 +71,21 @@ RSpec.describe Steppe::Service do
     expect(result.valid?).to be true
     spec = parse_body(result.response)
     expect(spec.keys).to match_array(%i[openapi info servers tags paths])
+  end
+
+  context 'handling request with an auth-protected endpoint' do
+    it 'forbids access if no bearer token given' do
+      request = build_request('/users')
+      endpoint = service[:users]
+      result = endpoint.run(request)
+      expect(result.response.status).to eq(401)
+    end
+
+    it 'forbids access if wrong bearer token given' do
+      request = build_request('/users', headers: { 'HTTP_AUTHORIZATION' => 'Bearer writetoken' })
+      endpoint = service[:users]
+      result = endpoint.run(request)
+      expect(result.response.status).to eq(403)
+    end
   end
 end

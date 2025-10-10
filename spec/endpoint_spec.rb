@@ -4,12 +4,16 @@ require 'rack'
 require_relative './spec_helper'
 
 RSpec.describe Steppe::Endpoint do
+  let(:service) do
+    Steppe::Service.new
+  end
+
   let(:user_class) do
     Data.define(:id, :name)
   end
 
   specify 'processing request and building response' do
-    endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+    endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
       e.query_schema(
         id: Steppe::Types::Lax::Integer
       )
@@ -47,7 +51,7 @@ RSpec.describe Steppe::Endpoint do
   end
 
   specify 'auto registering query_schema from path params' do
-    endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id')
+    endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id')
 
     request = build_request('/users/1', query: { id: '1' })
     conn = endpoint.run(request)
@@ -62,7 +66,7 @@ RSpec.describe Steppe::Endpoint do
   specify 'nested serializers' do
     user_struct = Data.define(:id, :name)
 
-    endpoint = Steppe::Endpoint.new(:test, :get, path: '/users') do |e|
+    endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users') do |e|
       e.step do |conn|
         u1 = user_struct.new(1, 'Joe')
         conn.continue [u1]
@@ -82,7 +86,7 @@ RSpec.describe Steppe::Endpoint do
 
   describe '#to_rack' do
     it 'returns a Rack-compatible app' do
-      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+      endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
         e.step do |conn|
           conn.valid(user_class.new(conn.params[:id], 'Joe'))
         end
@@ -101,7 +105,7 @@ RSpec.describe Steppe::Endpoint do
 
   describe 'content negotiation' do
     let(:endpoint) do
-      Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+      Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
         e.query_schema(
           id: Steppe::Types::Lax::Integer
         )
@@ -149,7 +153,7 @@ RSpec.describe Steppe::Endpoint do
 
   describe '#query_schema' do
     it 'builds #query_schema from path params' do
-      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id')
+      endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id')
 
       endpoint.query_schema.at_key(:id).tap do |field|
         expect(field).to be_a(Plumb::Composable)
@@ -159,7 +163,7 @@ RSpec.describe Steppe::Endpoint do
     end
 
     it 'overrides path params definitions while keeping :in metadata' do
-      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+      endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
         e.query_schema(
           id: Steppe::Types::Lax::Integer[10..100],
           q?: Steppe::Types::String
@@ -181,7 +185,7 @@ RSpec.describe Steppe::Endpoint do
         def call(result) = result
       end
 
-      endpoint = Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+      endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
         e.step step_with_query_schema.new(Steppe::Types::Hash[max: Integer])
       end
       expect(endpoint.query_schema.at_key(:id).metadata[:in]).to eq(:path)
@@ -191,7 +195,7 @@ RSpec.describe Steppe::Endpoint do
 
   describe 'validating query params' do
     subject(:endpoint) do
-      Steppe::Endpoint.new(:test, :get, path: '/users/:id') do |e|
+      Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
         e.query_schema(
           id: Steppe::Types::String[/^user-/],
           age?: Steppe::Types::Lax::Integer[18..]
@@ -217,7 +221,7 @@ RSpec.describe Steppe::Endpoint do
 
   describe '#payload_schema' do
     it 'adds schemas to #payload_schemas' do
-      endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+      endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
         # Payload schemas are merged
         e.payload_schema(
           name: String,
@@ -238,7 +242,7 @@ RSpec.describe Steppe::Endpoint do
 
   describe 'validating payload params' do
     subject(:endpoint) do
-      Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+      Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
         e.payload_schema(
           name: Steppe::Types::String.present,
           age: Steppe::Types::Lax::Integer[18..]
@@ -392,7 +396,7 @@ RSpec.describe Steppe::Endpoint do
   end
 
   specify 'full responder API with halted conn' do
-    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+    endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
       e.step do |conn|
         conn.invalid(errors: { name: 'is invalid' })
       end
@@ -419,7 +423,7 @@ RSpec.describe Steppe::Endpoint do
   end
 
   specify 'default response for 204 no content' do
-    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+    endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
       e.step do |conn|
         conn.respond_with(204)
       end
@@ -432,7 +436,7 @@ RSpec.describe Steppe::Endpoint do
   end
 
   specify 'default response for 304 not modified' do
-    endpoint = Steppe::Endpoint.new(:test, :post, path: '/users') do |e|
+    endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
       e.step do |conn|
         conn.respond_with(304)
       end

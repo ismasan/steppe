@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'steppe/auth'
+
 module Steppe
   class Service
     VERBS = %i[get post put patch delete].freeze
@@ -18,7 +20,7 @@ module Steppe
       def node_name = :tag
     end
 
-    attr_reader :node_name, :servers, :tags
+    attr_reader :node_name, :servers, :tags, :security_schemes
     attr_accessor :title, :description, :version
 
     def initialize(&)
@@ -29,6 +31,7 @@ module Steppe
       @node_name = :service
       @servers = []
       @tags = []
+      @security_schemes = {}
       yield self if block_given?
       freeze
     end
@@ -43,6 +46,48 @@ module Steppe
 
     def tag(name, description: nil, external_docs: nil)
       @tags << Tag.parse(name:, description:, external_docs:)
+      self
+    end
+
+    HashTokenStoreInterface = Types::Hash[String, Types::Array[String]]
+    TokenStoreInterface = Types::Interface[:get]
+
+    class HashTokenStore
+      class AccessToken < Data.define(:scopes)
+        def allows?(required_scopes)
+          (scopes & required_scopes).any?
+        end
+      end
+
+      def self.wrap(store)
+        case store
+        when HashTokenStoreInterface
+          new(store)
+        when TokenStoreInterface
+          store
+        else
+          raise ArgumentError, "expected a TokenStore interface #{TokenStoreInterface}, but got #{store.inspect}"
+        end
+      end
+
+      def initialize(hash)
+        @lookup = hash.transform_values { |scopes| AccessToken.new(scopes) }
+      end
+
+      def get(token)
+        @lookup[token]
+      end
+    end
+
+    # Security schemes
+    # https://swagger.io/docs/specification/v3_0/authentication/
+    def bearer_auth(name, store: {}, format: 'string')
+      store = HashTokenStore.wrap(store)
+      security_scheme Auth::Bearer.new(name, store:, format:)
+    end
+
+    def security_scheme(scheme)
+      @security_schemes[scheme.name] = scheme
       self
     end
 
@@ -95,7 +140,7 @@ module Steppe
 
     VERBS.each do |verb|
       define_method(verb) do |name, path, &block|
-        @lookup[name] = Endpoint.new(name, verb, path:, &block)
+        @lookup[name] = Endpoint.new(self, name, verb, path:, &block)
         self
       end
     end
