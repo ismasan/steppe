@@ -49,13 +49,50 @@ module Steppe
       self
     end
 
-    # Security schemes
-    # https://swagger.io/docs/specification/v3_0/authentication/
+    # Register a Bearer token authentication security scheme.
+    # This is a convenience method that creates a Bearer auth scheme and registers it.
+    #
+    # @see https://swagger.io/docs/specification/v3_0/authentication/
+    # @see Auth::Bearer
+    #
+    # @param name [String] The security scheme name (used to reference in endpoints)
+    # @param store [Hash, Auth::TokenStoreInterface] Token store mapping tokens to scopes.
+    #   Can be a Hash (converted to HashTokenStore) or a custom store implementing the TokenStoreInterface.
+    # @param format [String] Bearer token format hint for documentation (e.g., 'JWT', 'opaque')
+    # @return [self] Returns self for method chaining
+    #
+    # @example Basic usage with hash store
+    #   service.bearer_auth 'api_key', store: {
+    #     'token123' => ['read:users', 'write:users'],
+    #     'token456' => ['read:posts']
+    #   }
+    #
+    # @example With JWT format hint
+    #   service.bearer_auth 'jwt_auth', store: my_token_store, format: 'JWT'
     def bearer_auth(name, store: {}, format: 'string')
       store = Auth::HashTokenStore.wrap(store)
       security_scheme Auth::Bearer.new(name, store:, format:)
     end
 
+    # Register a security scheme for use in endpoints.
+    # Security schemes define authentication methods that can be applied to endpoints.
+    #
+    # @see https://swagger.io/docs/specification/v3_0/authentication/
+    # @see Auth::SecuritySchemeInterface
+    #
+    # @param scheme [Auth::SecuritySchemeInterface] A security scheme object implementing the SecuritySchemeInterface
+    # @return [self] Returns self for method chaining
+    #
+    # @example Register a custom security scheme
+    #   bearer = Steppe::Auth::Bearer.new('my_auth', store: token_store)
+    #   service.security_scheme(bearer)
+    #
+    # @example Register and use in an endpoint
+    #   service.bearer_auth 'api_key', store: { 'token123' => ['read:users'] }
+    #   service.get :users, '/users' do |e|
+    #     e.security 'api_key', ['read:users']
+    #     # ... endpoint definition
+    #   end
     def security_scheme(scheme)
       scheme => Auth::SecuritySchemeInterface
       @security_schemes[scheme.name] = scheme

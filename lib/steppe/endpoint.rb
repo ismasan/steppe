@@ -284,10 +284,38 @@ module Steppe
       end
     end
 
-    # What security schemes to use
-    # schemes must be registered in the parent service
-    # @param scheme_name [String]
-    # @param scopes [Array<String>]
+    # Apply a security scheme to this endpoint with required scopes.
+    # The security scheme must be registered in the parent Service using #security_scheme or #bearer_auth.
+    # This adds a processing step that validates authentication/authorization before other endpoint logic runs.
+    #
+    # @param scheme_name [String] Name of the security scheme (must match a registered scheme)
+    # @param scopes [Array<String>] Required permission scopes for this endpoint
+    # @return [void]
+    #
+    # @raise [KeyError] If the security scheme is not registered in the parent service
+    #
+    # @example Basic usage with Bearer authentication
+    #   service.bearer_auth 'api_key', store: {
+    #     'token123' => ['read:users', 'write:users']
+    #   }
+    #
+    #   service.get :users, '/users' do |e|
+    #     e.security 'api_key', ['read:users']  # Only tokens with read:users scope can access
+    #     e.step { |result| result.continue(data: User.all) }
+    #     e.json 200, UserListSerializer
+    #   end
+    #
+    # @example Multiple scopes required
+    #   service.get :admin_users, '/admin/users' do |e|
+    #     e.security 'api_key', ['read:users', 'admin:access']
+    #     # ... endpoint definition
+    #   end
+    #
+    # @note If authentication fails, returns 401 Unauthorized
+    # @note If authorization fails (missing required scopes), returns 403 Forbidden
+    # @see Service#security_scheme
+    # @see Service#bearer_auth
+    # @see Auth::Bearer#handle
     def security(scheme_name, scopes)
       scheme = service.security_schemes.fetch(scheme_name)
       scheme_step = SecurityStep.new(scheme, scopes:)
