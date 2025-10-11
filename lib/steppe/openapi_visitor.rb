@@ -31,7 +31,8 @@ module Steppe
         },
         'servers' => node.servers.map { |s| visit(s) },
         'tags' => node.tags.map { |s| visit(s) },
-        'paths' => node.endpoints.reduce({}) { |memo, e| visit(e, memo) }
+        'paths' => node.endpoints.reduce({}) { |memo, e| visit(e, memo) },
+        'components' => { 'securitySchemes' => visit_security_schemes(node.security_schemes) }
       )
     end
 
@@ -58,6 +59,7 @@ module Steppe
         'operationId' => node.rel_name.to_s,
         'description' => node.description,
         'tags' => node.tags,
+        'security' => visit_endpoint_security(node.registered_security_schemes),
         'parameters' => visit_parameters(node.query_schema),
         'requestBody' => visit_request_body(node.payload_schemas),
         'responses' => visit(node.responders)
@@ -100,6 +102,10 @@ module Steppe
 
     PARAMETERS_IN = %i[query path].freeze
 
+    def visit_endpoint_security(schemes)
+      schemes.map { |name, scopes| { name => scopes } }
+    end
+
     def visit_parameters(schema)
       specs = schema._schema.each.with_object({}) do |(name, type), h|
         h[name.to_s] = type if PARAMETERS_IN.include?(type.metadata[:in])
@@ -128,6 +134,10 @@ module Steppe
       end
 
       { 'required' => true, 'content' => content }
+    end
+
+    def visit_security_schemes(schemes)
+      schemes.transform_values(&:to_openapi)
     end
   end
 end

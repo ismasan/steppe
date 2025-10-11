@@ -187,7 +187,7 @@ module Steppe
       end
     end
 
-    attr_reader :rel_name, :payload_schemas, :responders, :path
+    attr_reader :rel_name, :payload_schemas, :responders, :path, :registered_security_schemes
     attr_accessor :description, :tags
 
     # Creates a new endpoint instance.
@@ -212,6 +212,7 @@ module Steppe
       @query_schema = Types::Hash
       @payload_schemas = {}
       @body_parsers = {}
+      @registered_security_schemes = {}
       @description = 'An endpoint'
       @specced = true
       @tags = []
@@ -268,7 +269,9 @@ module Steppe
     # @param scopes [Array<String>]
     def security(scheme_name, scopes)
       scheme = service.security_schemes.fetch(scheme_name)
-      step SecurityStep.new(scheme, scopes:)
+      scheme_step = SecurityStep.new(scheme, scopes:)
+      @registered_security_schemes[scheme.name] = scopes
+      step scheme_step
     end
 
     # Defines or returns the query parameter validation schema.

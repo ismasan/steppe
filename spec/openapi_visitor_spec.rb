@@ -4,10 +4,12 @@ require 'rack'
 
 RSpec.describe Steppe::OpenAPIVisitor do
   let(:service) do
-    Steppe::Service.new
+    Steppe::Service.new do |s|
+      s.bearer_auth 'BearerAuth', store: {}, format: 'JWT'
+    end
   end
 
-  specify 'request parameters schema' do
+  specify 'query parameters schema' do
     endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
       e.description = 'Test endpoint'
       e.query_schema(
@@ -29,7 +31,7 @@ RSpec.describe Steppe::OpenAPIVisitor do
     end
   end
 
-  specify 'request parameters schema' do
+  specify 'payload parameters schema' do
     endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
       e.description = 'Test endpoint'
       e.payload_schema(
@@ -51,6 +53,16 @@ RSpec.describe Steppe::OpenAPIVisitor do
         'required' => %w[name email], 'type' => 'object'
       }
     })
+  end
+
+  specify 'security schemes' do
+    endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
+      e.security 'BearerAuth', %w[scope1 scope2]
+    end
+
+    data = described_class.new.visit(endpoint)
+    # https://swagger.io/docs/specification/v3_0/authentication/bearer-authentication/
+    expect(data.dig('/users', 'post', 'security', 0, 'BearerAuth')).to match_array(%w[scope1 scope2])
   end
 
   specify 'response body schema' do
@@ -105,10 +117,13 @@ RSpec.describe Steppe::OpenAPIVisitor do
           external_docs: 'https://example.com/docs/users'
         )
 
+        s.bearer_auth 'BearerAuth', store: {}, format: 'JWT'
+
         s.server(url: 'http://example.com', description: 'Production server')
 
         s.get :users, '/users' do |e|
           e.description = 'List users'
+          e.security 'BearerAuth', %w[scope1 scope2]
         end
 
         s.post :create_user, '/users' do |e|
@@ -132,7 +147,7 @@ RSpec.describe Steppe::OpenAPIVisitor do
       end
     end
 
-    specify do
+    it 'generates OpenAPI spec for entire service' do
       data = described_class.call(service)
       expect(data['openapi']).to eq('3.0.0')
       expect(data['info']['title']).to eq('Users')
@@ -150,6 +165,11 @@ RSpec.describe Steppe::OpenAPIVisitor do
       expect(id_param['description']).to eq('user id')
       expect(id_param['schema']['type']).to eq('integer')
       expect(id_param['example']).to eq(1)
+      expect(data.dig('components', 'securitySchemes', 'BearerAuth')).to eq(
+        'type' => 'http', 
+        'scheme' => 'bearer',
+        'bearerFormat' => 'JWT'
+      )
     end
   end
 

@@ -2,21 +2,31 @@
 
 module Steppe
   module Auth
-    SecuritySchemeInterface = Types::Interface[:name, :scheme, :type, :handle]
+    SecuritySchemeInterface = Types::Interface[
+      :name, 
+      :handle
+    ]
 
     class Bearer
       HEADER = 'HTTP_AUTHORIZATION'
 
-      attr_reader :name, :format, :scheme, :type
+      attr_reader :name, :format, :scheme
 
       def initialize(name, store:, scheme: 'bearer', format: nil, header: HEADER)
         @name = name
         @store = store
-        @format = format
+        @format = format.to_s
         @scheme = scheme.to_s
-        @type = :http
         @header = header
         @matcher = %r{\A\s*#{Regexp.escape(@scheme)}\s+(.+?)\s*\z}i
+      end
+
+      def to_openapi
+        {
+          'type' => 'http',
+          'scheme' => scheme,
+          'bearerFormat' => format
+        }
       end
 
       def handle(conn, required_scopes)

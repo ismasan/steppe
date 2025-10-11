@@ -70,7 +70,7 @@ RSpec.describe Steppe::Service do
     result = specs_endpoint.run(request)
     expect(result.valid?).to be true
     spec = parse_body(result.response)
-    expect(spec.keys).to match_array(%i[openapi info servers tags paths])
+    expect(spec.keys).to match_array(%i[openapi info servers tags paths components])
   end
 
   describe '#security_scheme' do
