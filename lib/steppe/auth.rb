@@ -18,7 +18,10 @@ module Steppe
         @format = format.to_s
         @scheme = scheme.to_s
         @header = header
-        @header_schema = Types::Hash[@header => String]
+        # We mark the key as optional
+        # because we don't validate presence of the header and return a 422.
+        # (even though that'll most likely result in a 401 response after running #handle)
+        @header_schema = Types::Hash["#{@header}?" => String]
         @matcher = %r{\A\s*#{Regexp.escape(@scheme)}\s+(.+?)\s*\z}i
       end
 
