@@ -12,7 +12,8 @@ module Steppe
     # - handle: Processes authentication/authorization for a connection
     SecuritySchemeInterface = Types::Interface[
       :name,
-      :handle
+      :handle,
+      :to_openapi
     ]
 
     # HTTP Bearer token authentication security scheme.
