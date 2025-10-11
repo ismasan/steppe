@@ -75,6 +75,22 @@ module Steppe
       def errors = result.errors
     end
 
+    class HeaderValidator
+      attr_reader :header_schema
+
+      def initialize(header_schema)
+        @header_schema = query_schema.is_a?(Hash) ? Types::Hash[query_schema] : query_schema
+      end
+
+      def call(conn)
+        result = header_schema.resolve(conn.request.env)
+        conn.request.env.merge!(result.value)
+        return conn.respond_with(422).invalid(errors: result.errors) unless result.valid?
+
+        conn.valid
+      end
+    end
+
     # Internal step that validates query parameters against a schema.
     # Merges validated query params into the result params hash.
     # Returns 422 Unprocessable Entity if validation fails.
@@ -210,6 +226,7 @@ module Steppe
       @verb = verb
       @responders = ResponderRegistry.new
       @query_schema = Types::Hash
+      @header_schema = Types::Hash
       @payload_schemas = {}
       @body_parsers = {}
       @registered_security_schemes = {}
@@ -253,9 +270,13 @@ module Steppe
     # security schemes can then respond to #header_schema
     # Ex. Bearer scheme should require an 'Authorization' header by default.
     class SecurityStep
+      attr_reader :header_schema, :query_schema
+
       def initialize(scheme, scopes: [])
         @scheme = scheme
         @scopes = scopes
+        @header_schema = scheme.respond_to?(:header_schema) ? scheme.header_schema : Types::Hash
+        @query_schema = scheme.respond_to?(:query_schema) ? scheme.query_schema : Types::Hash
       end
 
       def call(conn)
@@ -272,6 +293,14 @@ module Steppe
       scheme_step = SecurityStep.new(scheme, scopes:)
       @registered_security_schemes[scheme.name] = scopes
       step scheme_step
+    end
+
+    def header_schema(sc = nil)
+      if sc
+        step(HeaderValidator.new(sc))
+      else
+        @header_schema
+      end
     end
 
     # Defines or returns the query parameter validation schema.
@@ -569,9 +598,14 @@ module Steppe
     # Hook called when adding steps to the pipeline.
     # Automatically merges query and payload schemas from composable steps.
     def prepare_step(callable)
+      merge_header_schema(callable.header_schema) if callable.respond_to?(:header_schema)
       merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)
       merge_payload_schema(callable) if callable.respond_to?(:payload_schema)
       callable
+    end
+
+    def merge_header_schema(sc)
+      @header_schema += sc
     end
 
     # Merges a query schema from a step into the endpoint's query schema.

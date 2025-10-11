@@ -5,7 +5,9 @@ require_relative './spec_helper'
 
 RSpec.describe Steppe::Endpoint do
   let(:service) do
-    Steppe::Service.new
+    Steppe::Service.new do |s|
+      s.bearer_auth 'BearerAuth', store: {}, format: 'JWT'
+    end
   end
 
   let(:user_class) do
@@ -148,6 +150,23 @@ RSpec.describe Steppe::Endpoint do
       expect(result.response.status).to eq(200)
       expect(result.response.content_type).to eq('application/json')
       expect(result.response.body).to eq(["{\"id\":1,\"name\":\"Joe\"}"])
+    end
+  end
+
+  describe '#header_schema' do
+    it 'is a noop by default' do
+      endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id')
+      expect(endpoint.header_schema).to eq Steppe::Types::Hash
+    end
+
+    it 'lets security schemes add to the header schema, if provided' do
+      endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
+        e.security 'BearerAuth', []
+      end
+      endpoint.header_schema.at_key('HTTP_AUTHORIZATION').tap do |field|
+        expect(field).to be_a(Plumb::Composable)
+        expect(field.metadata[:type]).to eq(String)
+      end
     end
   end
 

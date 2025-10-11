@@ -10,7 +10,7 @@ module Steppe
     class Bearer
       HEADER = 'HTTP_AUTHORIZATION'
 
-      attr_reader :name, :format, :scheme
+      attr_reader :name, :format, :scheme, :header_schema
 
       def initialize(name, store:, scheme: 'bearer', format: nil, header: HEADER)
         @name = name
@@ -18,6 +18,7 @@ module Steppe
         @format = format.to_s
         @scheme = scheme.to_s
         @header = header
+        @header_schema = Types::Hash[@header => String]
         @matcher = %r{\A\s*#{Regexp.escape(@scheme)}\s+(.+?)\s*\z}i
       end
 
