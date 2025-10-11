@@ -282,10 +282,6 @@ module Steppe
     # Node name for OpenAPI documentation
     def node_name = :endpoint
 
-    # TODO: endpoints should support a #header_schema
-    # which is also generated as OpenAPI {in: 'header'} parameters
-    # security schemes can then respond to #header_schema
-    # Ex. Bearer scheme should require an 'Authorization' header by default.
     class SecurityStep
       attr_reader :header_schema, :query_schema
 
