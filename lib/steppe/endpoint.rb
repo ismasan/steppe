@@ -75,13 +75,24 @@ module Steppe
       def errors = result.errors
     end
 
+    # Internal step that validates HTTP headers against a schema.
+    # Validates headers from the Rack env and merges validated values back into the env.
+    # Returns 422 Unprocessable Entity if validation fails.
+    #
+    # @note HTTP header names in Rack env use the format 'HTTP_*' (e.g., 'HTTP_AUTHORIZATION')
+    # @note Security schemes often use this to validate required headers (e.g., Authorization)
     class HeaderValidator
       attr_reader :header_schema
 
+      # @param header_schema [Hash, Plumb::Composable] Schema definition for HTTP headers
       def initialize(header_schema)
         @header_schema = header_schema.is_a?(Hash) ? Types::Hash[header_schema] : header_schema
       end
 
+      # Validates headers from the request environment.
+      #
+      # @param conn [Result] The current result/connection object
+      # @return [Result] Updated result with validated env or error response
       def call(conn)
         result = header_schema.resolve(conn.request.env)
         conn.request.env.merge!(result.value)
@@ -323,6 +334,37 @@ module Steppe
       step scheme_step
     end
 
+    # Defines or returns the HTTP header validation schema.
+    #
+    # When called with a schema argument, registers a HeaderValidator step to validate
+    # HTTP headers. When called without arguments, returns the current header schema.
+    # Header schemas are automatically merged from security schemes and other composable steps.
+    #
+    # @overload header_schema(schema)
+    #   Define header validation schema
+    #   @param schema [Hash, Plumb::Composable] Schema definition for HTTP headers
+    #   @return [void]
+    #   @example Validate custom header
+    #     header_schema(
+    #       'HTTP_X_API_VERSION' => Types::String.options(['v1', 'v2']),
+    #       'HTTP_X_REQUEST_ID?' => Types::String.present
+    #     )
+    #
+    #   @example Validate Authorization header manually
+    #     header_schema(
+    #       'HTTP_AUTHORIZATION' => Types::String[/^Bearer .+/]
+    #     )
+    #
+    # @overload header_schema
+    #   Get current header schema
+    #   @return [Plumb::Composable] Current header schema
+    #
+    # @note HTTP header names in Rack env use the format 'HTTP_*' (e.g., 'HTTP_AUTHORIZATION')
+    # @note Optional headers can be specified with a '?' suffix (e.g., 'HTTP_X_CUSTOM?')
+    # @note Security schemes automatically add their header requirements via SecurityStep
+    #
+    # @see HeaderValidator
+    # @see Auth::Bearer#header_schema
     def header_schema(sc = nil)
       if sc
         step(HeaderValidator.new(sc))
