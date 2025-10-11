@@ -673,7 +673,7 @@ end
 
 And then use it to configure the security scheme in your service
 
-```
+```ruby
 api.bearer_auth 'BearerToken', store: RedisTokenStore.new(REDIS)
 ```
 
@@ -681,10 +681,10 @@ You can also implement stores to fetch tokens from a database, or to decode JWT 
 
 #### Custom security schemes
 
-The `Service#bearer_auth` is a shortcut to register built-in security schemes. You can use `Service#security_scheme` to register custom implementations.
+`Service#bearer_auth` is a shortcut to register built-in security schemes. You can use `Service#security_scheme` to register custom implementations.
 
 ```ruby
-api.security_scheme MyCustomAuthentication.new(name: 'BulletProof)
+api.security_scheme MyCustomAuthentication.new(name: 'BulletProof')
 ```
 
 The custom security scheme is expected to implement the following interface:
