@@ -5,7 +5,7 @@ PATH
       mustermann
       mustermann-contrib
       papercraft
-      plumb (>= 0.0.14)
+      plumb (>= 0.0.15)
       rack (>= 3.0)
 
 GEM
@@ -48,7 +48,7 @@ GEM
       kramdown-parser-gfm (~> 1.1.0)
       rouge (~> 4.6.1)
       sirop (~> 1.0)
-    plumb (0.0.14)
+    plumb (0.0.15)
       bigdecimal
       concurrent-ruby
     pp (0.6.2)
