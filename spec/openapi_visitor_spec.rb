@@ -9,25 +9,27 @@ RSpec.describe Steppe::OpenAPIVisitor do
     end
   end
 
-  specify 'query parameters schema' do
+  specify 'query and header parameters schemas' do
     endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users/:id') do |e|
       e.description = 'Test endpoint'
       e.query_schema(
         id: Steppe::Types::Lax::Integer.desc('user id'),
         q?: Steppe::Types::String.desc('search by name')
       )
+      e.header_schema 'ApiKey' => Steppe::Types::String.present.desc('The API key')
     end
 
     data = described_class.new.visit(endpoint)
     expect(data.dig('/users/{id}', 'get', 'description')).to eq('Test endpoint')
     expect(data.dig('/users/{id}', 'get', 'operationId')).to eq('test')
     data.dig('/users/{id}', 'get', 'parameters').tap do |params|
-      expect(pluck(params, 'name')).to eq(%w[id q])
-      expect(pluck(params, 'in')).to eq(%w[path query])
-      expect(pluck(params, 'required')).to eq([true, false])
-      expect(pluck(params, 'description')).to eq(['user id', 'search by name'])
+      expect(pluck(params, 'name')).to eq(%w[id q ApiKey])
+      expect(pluck(params, 'in')).to eq(%w[path query header])
+      expect(pluck(params, 'required')).to eq([true, false, true])
+      expect(pluck(params, 'description')).to eq(['user id', 'search by name', 'The API key'])
       expect(params.dig(0, 'schema', 'type')).to eq('integer')
       expect(params.dig(1, 'schema', 'type')).to eq('string')
+      expect(params.dig(2, 'schema', 'type')).to eq('string')
     end
   end
 
