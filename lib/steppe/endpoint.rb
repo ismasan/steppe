@@ -79,13 +79,13 @@ module Steppe
       attr_reader :header_schema
 
       def initialize(header_schema)
-        @header_schema = query_schema.is_a?(Hash) ? Types::Hash[query_schema] : query_schema
+        @header_schema = header_schema.is_a?(Hash) ? Types::Hash[header_schema] : header_schema
       end
 
       def call(conn)
         result = header_schema.resolve(conn.request.env)
         conn.request.env.merge!(result.value)
-        return conn.respond_with(422).invalid(errors: result.errors) unless result.valid?
+        return conn.respond_with(422).invalid(errors: { headers: result.errors }) unless result.valid?
 
         conn.valid
       end

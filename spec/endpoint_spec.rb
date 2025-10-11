@@ -168,6 +168,30 @@ RSpec.describe Steppe::Endpoint do
         expect(field.metadata[:type]).to eq(String)
       end
     end
+
+    it 'validates headers' do
+      endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users') do |e|
+        e.header_schema 'ApiKey' => Steppe::Types::String[/^api-/]
+      end
+
+      request = build_request('/users', headers: { 'ApiKey' => 'nope' })
+      result = endpoint.run(request)
+      expect(result.response.status).to eq(422)
+      expect(result.errors[:headers]).to eq('ApiKey' => %(Must match /^api-/))
+    end
+
+    it 'collects mutiple schemas' do
+      endpoint = Steppe::Endpoint.new(service, :test, :get, path: '/users') do |e|
+        e.header_schema 'ApiKey' => Steppe::Types::String.invoke(:upcase)
+        e.header_schema 'ApiVersion' => Steppe::Types::Lax::Integer
+      end
+
+      expect(endpoint.header_schema._schema.keys.map(&:to_sym)).to eq(%i[ApiKey ApiVersion])
+      request = build_request('/users', headers: { 'ApiKey' => 'api-one', 'ApiVersion' => '123' })
+      result = endpoint.run(request)
+      expect(result.request.env['ApiKey']).to eq('API-ONE')
+      expect(result.request.env['ApiVersion']).to eq(123)
+    end
   end
 
   describe '#query_schema' do
