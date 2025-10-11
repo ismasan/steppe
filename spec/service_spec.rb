@@ -107,4 +107,37 @@ RSpec.describe Steppe::Service do
       expect(result.response.status).to eq(403)
     end
   end
+
+  context 'applying security schemes at the service level' do
+    subject(:service) do
+      described_class.new do |api|
+        api.title = 'Users'
+        api.bearer_auth(
+          'BearerAuth', 
+          store: { 'readtoken' => %w[all:read one:read] }
+        )
+
+        # This endpoint doesn't get the BearerAuth scheme applied
+        api.get :root, '/'
+
+        # Endpoints registered after this get the BearerAuth scheme applied
+        api.security 'BearerAuth', %w[all:read]
+
+        api.get :users, '/users'
+        api.post :create_user, '/users'
+      end
+    end
+
+    it 'applies security scheme to all endpoints in the service' do
+      expect(service[:root].registered_security_schemes['BearerAuth']).to be_nil
+      expect(service[:users].registered_security_schemes['BearerAuth']).not_to be_nil
+      expect(service[:create_user].registered_security_schemes['BearerAuth']).not_to be_nil
+    end
+
+    it 'registers scheme validators' do
+      expect(service[:root].header_schema.at_key('HTTP_AUTHORIZATION')).to be_nil
+      expect(service[:users].header_schema.at_key('HTTP_AUTHORIZATION')).not_to be_nil
+      expect(service[:create_user].header_schema.at_key('HTTP_AUTHORIZATION')).not_to be_nil
+    end
+  end
 end

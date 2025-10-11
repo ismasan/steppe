@@ -20,7 +20,7 @@ module Steppe
       def node_name = :tag
     end
 
-    attr_reader :node_name, :servers, :tags, :security_schemes
+    attr_reader :node_name, :servers, :tags, :security_schemes, :registered_security_schemes
     attr_accessor :title, :description, :version
 
     def initialize(&)
@@ -32,6 +32,7 @@ module Steppe
       @servers = []
       @tags = []
       @security_schemes = {}
+      @registered_security_schemes = {}
       yield self if block_given?
       freeze
     end
@@ -96,6 +97,45 @@ module Steppe
     def security_scheme(scheme)
       scheme => Auth::SecuritySchemeInterface
       @security_schemes[scheme.name] = scheme
+      self
+    end
+
+    # Apply a security requirement globally to endpoints defined after this call.
+    # This registers a security scheme with required scopes at the service level,
+    # making it apply to all endpoints defined after this method is called.
+    #
+    # IMPORTANT: Order matters! This method only applies security to endpoints
+    # defined AFTER it is called, not to endpoints defined before.
+    #
+    # @see https://swagger.io/docs/specification/v3_0/authentication/
+    # @see Endpoint#security
+    #
+    # @param scheme_name [String] The name of a registered security scheme
+    # @param scopes [Array<String>] Required scopes for this security requirement
+    # @return [self] Returns self for method chaining
+    # @raise [KeyError] If the security scheme has not been registered
+    #
+    # @example Apply Bearer auth globally to all endpoints defined after
+    #   service.bearer_auth 'api_key', store: {
+    #     'token123' => ['read:users', 'write:users']
+    #   }
+    #   service.security 'api_key', ['read:users']
+    #   # All endpoints defined below will require this security
+    #
+    # @example Order matters - security only applies to endpoints after the call
+    #   service.bearer_auth 'api_key', store: tokens
+    #   service.get :public_endpoint, '/public' { }  # No security required
+    #   service.security 'api_key', ['read:users']
+    #   service.get :protected_endpoint, '/protected' { }  # Security required
+    #
+    # @example Multiple security schemes
+    #   service.bearer_auth 'api_key', store: tokens
+    #   service.bearer_auth 'admin_key', store: admin_tokens
+    #   service.security 'api_key', ['read:users']
+    #   service.security 'admin_key', ['admin']
+    def security(scheme_name, scopes)
+      scheme = security_schemes.fetch(scheme_name)
+      @registered_security_schemes[scheme_name] = scopes
       self
     end
 

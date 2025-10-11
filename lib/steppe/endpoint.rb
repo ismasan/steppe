@@ -245,7 +245,13 @@ module Steppe
       @specced = true
       @tags = []
 
-      # This registers a first query_schema
+      # This registers security schemes declared in the service
+      # which may declare their own header, query or payload schemas
+      service.registered_security_schemes.each do |name, scopes|
+        security name, scopes
+      end
+
+      # This registers a query_schema
       # and a QueryValidator step
       self.path = path
 
