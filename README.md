@@ -239,7 +239,7 @@ end
 
 #### Steps with schemas
 
-A custom step that also supports `#query_schema` or `#payload_schema` will have those schemas merged into the endpoint's schemas, which can be used to generate OpenAPI documentation.
+A custom step that also supports `#query_schema`, `#payload_schema` and `#header_schema` will have those schemas merged into the endpoint's schemas, which can be used to generate OpenAPI documentation.
 
 This is so that you're free to bring your own domain objects that do their own validation.
 
@@ -869,7 +869,7 @@ class MyCustomAuthentication
 end
 ```
 
-Security schemes can optionally implement `#query_schema`, `#payload_schemas` and `#header_schema`, which will be merged onto the endpoint's equivalents, and automatically added to OpenAPI documentation.
+Security schemes can optionally implement [#query_schema](#query-schemas), [#payload_schemas](#payload-schemas) and [#header_schema](#header-schemas), which will be merged onto the endpoint's equivalents, and automatically added to OpenAPI documentation.
 
 ## Installation
 
