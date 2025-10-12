@@ -165,7 +165,7 @@ api.post :create_user, '/users' do |e|
 end
 ```
 
-### It's pipeline steps all the way down
+### It's pipelines steps all the way down
 
 Query and payload schemas are themselves steps in the processing pipeline, so you can insert steps before or after each of them.
 
