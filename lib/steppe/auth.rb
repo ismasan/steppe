@@ -23,13 +23,21 @@ module Steppe
   module Responses
     private
 
-    def unauthorized(conn, realm)
-      conn.response.add_header(Auth::WWW_AUTHENTICATE, 'Basic realm="%s"' % realm)
+    def unauthorized(conn)
+      conn.response.add_header(Auth::WWW_AUTHENTICATE, %(#{scheme.capitalize} realm="#{name}"))
       conn.respond_with(401).halt
     end
 
     def forbidden(conn)
       conn.respond_with(403).halt
+    end
+
+    def name
+      raise NotImplementedError
+    end
+
+    def scheme
+      raise NotImplementedError
     end
   end
 end

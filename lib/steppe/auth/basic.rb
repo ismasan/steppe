@@ -5,6 +5,7 @@ module Steppe
     class Basic
       include Responses
 
+      SCHEME = 'basic'
       EXP = /^Basic\s+([A-Za-z0-9+\/=]+)\s*$/
 
       CredentialsStoreInterface = Types::Interface[:lookup]
@@ -12,7 +13,7 @@ module Steppe
       class SimpleUserPasswordStore
         # { ['joe', 'secret' => true, ['anna', 'nope'] => false }
         # { 'joe' => 'secret', 'anna' => '123' }
-        Interface = Types::Hash[String, String]
+        HashInterface = Types::Hash[String, String]
 
         def initialize(hash)
           @lookup = hash
@@ -25,8 +26,9 @@ module Steppe
 
       def initialize(name, store:)
         @name = name
+        @scheme = SCHEME
         @store = case store
-        when SimpleUserPasswordStore::Interface
+        when SimpleUserPasswordStore::HashInterface
           SimpleUserPasswordStore.new(store)
         when CredentialsStoreInterface
           store
@@ -35,12 +37,12 @@ module Steppe
         end
       end
 
-      def handle(conn)
+      def handle(conn, _required_scopes = nil)
         auth_str = conn.request.env[HTTP_AUTHORIZATION]
-        return unauthorized(conn, @name) if auth_str.nil?
+        return unauthorized(conn) if auth_str.nil?
 
         match = auth_str.match(EXP)
-        return unauthorized(conn, @name) if match.nil?
+        return unauthorized(conn) if match.nil?
 
         username, password = decode(match[1]) 
         return forbidden(conn) if @store.lookup(username) != password
@@ -51,11 +53,13 @@ module Steppe
       def to_openapi
         {
           'type' => 'http',
-          'scheme' => 'basic'
+          'scheme' => scheme
         }
       end
 
       private
+
+      attr_reader :scheme
 
       def decode(auth_str)
         auth_str.to_s.unpack1('m').split(':', 2)
