@@ -63,11 +63,6 @@ RSpec.describe Steppe::Auth::Basic do
 
   private
 
-  def conn_with(...)
-    request = build_request(...)
-    Steppe::Result::Continue.new(nil, request:)
-  end
-
   def encode(username, password)
     # concatenate by ':' and base64-encode credentials
     creds = [[username, password].join(':')].pack("m*")

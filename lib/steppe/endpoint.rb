@@ -347,7 +347,7 @@ module Steppe
     # @see Service#security_scheme
     # @see Service#bearer_auth
     # @see Auth::Bearer#handle
-    def security(scheme_name, scopes)
+    def security(scheme_name, scopes = [])
       scheme = service.security_schemes.fetch(scheme_name)
       scheme_step = SecurityStep.new(scheme, scopes:)
       @registered_security_schemes[scheme.name] = scopes

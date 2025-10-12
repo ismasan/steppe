@@ -136,7 +136,7 @@ module Steppe
     #   service.bearer_auth 'admin_key', store: admin_tokens
     #   service.security 'api_key', ['read:users']
     #   service.security 'admin_key', ['admin']
-    def security(scheme_name, scopes)
+    def security(scheme_name, scopes = [])
       scheme = security_schemes.fetch(scheme_name)
       @registered_security_schemes[scheme_name] = scopes
       self
