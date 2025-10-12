@@ -18,6 +18,8 @@ module Steppe
     #   e.security 'my_auth', ['read:users']
     #
     class Bearer
+      include Responses
+
       # Interface for custom token store implementations.
       # Required methods:
       # - get(token): Returns an access token object or nil
@@ -61,9 +63,6 @@ module Steppe
         end
       end
 
-      # Default HTTP header for Authorization
-      HEADER = 'HTTP_AUTHORIZATION'
-
       attr_reader :name, :format, :scheme, :header_schema
 
       # Initialize a new Bearer authentication scheme.
@@ -73,7 +72,7 @@ module Steppe
       # @param scheme [String] The authentication scheme (default: 'bearer')
       # @param format [String, nil] Optional bearer format hint (e.g., 'JWT')
       # @param header [String] The HTTP header to check (default: HTTP_AUTHORIZATION)
-      def initialize(name, store:, scheme: 'bearer', format: nil, header: HEADER)
+      def initialize(name, store:, scheme: 'bearer', format: nil, header: HTTP_AUTHORIZATION)
         @name = name
         @store = case store
         when HashTokenStore::Interface
@@ -113,19 +112,16 @@ module Steppe
       # @return [Steppe::Result::Continue, Steppe::Result::Halt] The connection, or halted with 401/403 status
       def handle(conn, required_scopes)
         header_value = conn.request.get_header(@header).to_s.strip
-        return conn.respond_with(401).halt if header_value.empty?
+        return unauthorized(conn) if header_value.empty?
 
         token = header_value[@matcher, 1]
-        return conn.respond_with(401).halt if header_value.empty?
+        return unauthorized(conn) if token.nil?
 
         access_token = @store.get(token)
-        return conn.respond_with(401).halt if access_token.nil?
+        return forbidden(conn) unless access_token&.allows?(required_scopes)
 
-        return conn if access_token.allows?(required_scopes)
-
-        conn.respond_with(403).halt
+        conn
       end
     end
-
   end
 end
