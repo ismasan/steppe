@@ -123,6 +123,11 @@ You can extend the implicit query schema to add or update individual fields
 e.query_schema(
   id: Types::Lax::Integer  
 )
+
+e.step do |conn|
+  # conn.params[:id] is an Integer
+  conn.valid conn.params[:id] * 10
+end
 ```
 
 Multiple calls to `#query_schema` will aggregate into a single `Endpoint#query_schema`
