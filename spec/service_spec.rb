@@ -76,8 +76,7 @@ RSpec.describe Steppe::Service do
   context 'security schemes' do
     describe '#security_scheme' do
       it 'allows valid interface' do
-        store = Steppe::Auth::HashTokenStore.new({})
-        scheme = Steppe::Auth::Bearer.new('test', store:)
+        scheme = Steppe::Auth::Bearer.new('test', store: {})
         endpoint = described_class.new do |api|
           api.security_scheme scheme
         end
@@ -90,6 +89,16 @@ RSpec.describe Steppe::Service do
             api.security_scheme Object.new
           end
         }.to raise_error(NoMatchingPatternError)
+      end
+    end
+
+    describe '#basic_auth' do
+      it 'registers a BasicAuth scheme' do
+        service = described_class.new do |api|
+          api.basic_auth('MyAuth', store: {})
+        end
+
+        expect(service.security_schemes['MyAuth']).to be_a(Steppe::Auth::Basic)
       end
     end
 

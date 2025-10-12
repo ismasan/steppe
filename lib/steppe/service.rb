@@ -71,8 +71,11 @@ module Steppe
     # @example With JWT format hint
     #   service.bearer_auth 'jwt_auth', store: my_token_store, format: 'JWT'
     def bearer_auth(name, store: {}, format: 'string')
-      store = Auth::HashTokenStore.wrap(store)
       security_scheme Auth::Bearer.new(name, store:, format:)
+    end
+
+    def basic_auth(name, store: {})
+      security_scheme Auth::Basic.new(name, store:)
     end
 
     # Register a security scheme for use in endpoints.

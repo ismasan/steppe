@@ -16,6 +16,10 @@ module Steppe
 
     def valid? = true
     def invalid? = !valid?
+    # TODO: continue and valid are different things.
+    # continue = pipeline can proceed with next step
+    # valid = result has no errors.
+    def continue? = valid?
 
     def inspect
       %(<#{self.class}##{object_id} [#{response.status}] value:#{value.inspect} errors:#{errors.inspect}>)
