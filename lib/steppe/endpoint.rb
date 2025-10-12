@@ -75,6 +75,23 @@ module Steppe
       def errors = result.errors
     end
 
+    DefaultHTMLSerializer = -> (conn) {
+      html5 {
+        head {
+          title "Default #{conn.response.status}"
+        }
+        body {
+          h1 "Default view"
+          dl {
+            dt "Response status:"
+            dd conn.response.status.to_s
+            dt "Errors:"
+            dd conn.errors.inspect
+          }
+        }
+      }
+    }
+
     # Internal step that validates HTTP headers against a schema.
     # Validates headers from the Rack env and merges validated values back into the env.
     # Returns 422 Unprocessable Entity if validation fails.
@@ -264,6 +281,7 @@ module Steppe
       # TODO: match any content type
       # respond 304, '*/*'
       respond 401..422, :json, DefaultEntitySerializer
+      respond 401..422, :html, DefaultHTMLSerializer
       freeze
     end
 
