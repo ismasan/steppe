@@ -75,6 +75,33 @@ module Steppe
       def errors = result.errors
     end
 
+    # Internal step that validates HTTP headers against a schema.
+    # Validates headers from the Rack env and merges validated values back into the env.
+    # Returns 422 Unprocessable Entity if validation fails.
+    #
+    # @note HTTP header names in Rack env use the format 'HTTP_*' (e.g., 'HTTP_AUTHORIZATION')
+    # @note Security schemes often use this to validate required headers (e.g., Authorization)
+    class HeaderValidator
+      attr_reader :header_schema
+
+      # @param header_schema [Hash, Plumb::Composable] Schema definition for HTTP headers
+      def initialize(header_schema)
+        @header_schema = header_schema.is_a?(Hash) ? Types::Hash[header_schema] : header_schema
+      end
+
+      # Validates headers from the request environment.
+      #
+      # @param conn [Result] The current result/connection object
+      # @return [Result] Updated result with validated env or error response
+      def call(conn)
+        result = header_schema.resolve(conn.request.env)
+        conn.request.env.merge!(result.value)
+        return conn.respond_with(422).invalid(errors: { headers: result.errors }) unless result.valid?
+
+        conn.valid
+      end
+    end
+
     # Internal step that validates query parameters against a schema.
     # Merges validated query params into the result params hash.
     # Returns 422 Unprocessable Entity if validation fails.
@@ -187,7 +214,7 @@ module Steppe
       end
     end
 
-    attr_reader :rel_name, :payload_schemas, :responders, :path
+    attr_reader :rel_name, :payload_schemas, :responders, :path, :registered_security_schemes
     attr_accessor :description, :tags
 
     # Creates a new endpoint instance.
@@ -202,20 +229,29 @@ module Steppe
     #     e.step { |result| result.continue(data: User.find(result.params[:id])) }
     #     e.respond 200, :json, UserSerializer
     #   end
-    def initialize(rel_name, verb, path: '/', &)
+    def initialize(service, rel_name, verb, path: '/', &)
       # Do not setup with block yet
       super(freeze_after: false, &nil)
+      @service = service
       @rel_name = rel_name
       @verb = verb
       @responders = ResponderRegistry.new
       @query_schema = Types::Hash
+      @header_schema = Types::Hash
       @payload_schemas = {}
       @body_parsers = {}
+      @registered_security_schemes = {}
       @description = 'An endpoint'
       @specced = true
       @tags = []
 
-      # This registers a first query_schema
+      # This registers security schemes declared in the service
+      # which may declare their own header, query or payload schemas
+      service.registered_security_schemes.each do |name, scopes|
+        security name, scopes
+      end
+
+      # This registers a query_schema
       # and a QueryValidator step
       self.path = path
 
@@ -227,8 +263,7 @@ module Steppe
       respond 200..299, :json, DefaultEntitySerializer
       # TODO: match any content type
       # respond 304, '*/*'
-      respond 404, :json, DefaultEntitySerializer
-      respond 422, :json, DefaultEntitySerializer
+      respond 401..422, :json, DefaultEntitySerializer
       freeze
     end
 
@@ -246,6 +281,99 @@ module Steppe
 
     # Node name for OpenAPI documentation
     def node_name = :endpoint
+
+    class SecurityStep
+      attr_reader :header_schema, :query_schema
+
+      def initialize(scheme, scopes: [])
+        @scheme = scheme
+        @scopes = scopes
+        @header_schema = scheme.respond_to?(:header_schema) ? scheme.header_schema : Types::Hash
+        @query_schema = scheme.respond_to?(:query_schema) ? scheme.query_schema : Types::Hash
+      end
+
+      def call(conn)
+        @scheme.handle(conn, @scopes) 
+      end
+    end
+
+    # Apply a security scheme to this endpoint with required scopes.
+    # The security scheme must be registered in the parent Service using #security_scheme or #bearer_auth.
+    # This adds a processing step that validates authentication/authorization before other endpoint logic runs.
+    #
+    # @param scheme_name [String] Name of the security scheme (must match a registered scheme)
+    # @param scopes [Array<String>] Required permission scopes for this endpoint
+    # @return [void]
+    #
+    # @raise [KeyError] If the security scheme is not registered in the parent service
+    #
+    # @example Basic usage with Bearer authentication
+    #   service.bearer_auth 'api_key', store: {
+    #     'token123' => ['read:users', 'write:users']
+    #   }
+    #
+    #   service.get :users, '/users' do |e|
+    #     e.security 'api_key', ['read:users']  # Only tokens with read:users scope can access
+    #     e.step { |result| result.continue(data: User.all) }
+    #     e.json 200, UserListSerializer
+    #   end
+    #
+    # @example Multiple scopes required
+    #   service.get :admin_users, '/admin/users' do |e|
+    #     e.security 'api_key', ['read:users', 'admin:access']
+    #     # ... endpoint definition
+    #   end
+    #
+    # @note If authentication fails, returns 401 Unauthorized
+    # @note If authorization fails (missing required scopes), returns 403 Forbidden
+    # @see Service#security_scheme
+    # @see Service#bearer_auth
+    # @see Auth::Bearer#handle
+    def security(scheme_name, scopes)
+      scheme = service.security_schemes.fetch(scheme_name)
+      scheme_step = SecurityStep.new(scheme, scopes:)
+      @registered_security_schemes[scheme.name] = scopes
+      step scheme_step
+    end
+
+    # Defines or returns the HTTP header validation schema.
+    #
+    # When called with a schema argument, registers a HeaderValidator step to validate
+    # HTTP headers. When called without arguments, returns the current header schema.
+    # Header schemas are automatically merged from security schemes and other composable steps.
+    #
+    # @overload header_schema(schema)
+    #   Define header validation schema
+    #   @param schema [Hash, Plumb::Composable] Schema definition for HTTP headers
+    #   @return [void]
+    #   @example Validate custom header
+    #     header_schema(
+    #       'HTTP_X_API_VERSION' => Types::String.options(['v1', 'v2']),
+    #       'HTTP_X_REQUEST_ID?' => Types::String.present
+    #     )
+    #
+    #   @example Validate Authorization header manually
+    #     header_schema(
+    #       'HTTP_AUTHORIZATION' => Types::String[/^Bearer .+/]
+    #     )
+    #
+    # @overload header_schema
+    #   Get current header schema
+    #   @return [Plumb::Composable] Current header schema
+    #
+    # @note HTTP header names in Rack env use the format 'HTTP_*' (e.g., 'HTTP_AUTHORIZATION')
+    # @note Optional headers can be specified with a '?' suffix (e.g., 'HTTP_X_CUSTOM?')
+    # @note Security schemes automatically add their header requirements via SecurityStep
+    #
+    # @see HeaderValidator
+    # @see Auth::Bearer#header_schema
+    def header_schema(sc = nil)
+      if sc
+        step(HeaderValidator.new(sc))
+      else
+        @header_schema
+      end
+    end
 
     # Defines or returns the query parameter validation schema.
     #
@@ -537,13 +665,19 @@ module Steppe
 
     private
 
+    attr_reader :service
+
     # Hook called when adding steps to the pipeline.
     # Automatically merges query and payload schemas from composable steps.
     def prepare_step(callable)
-      p callable if callable.respond_to?(:query_schema)
+      merge_header_schema(callable.header_schema) if callable.respond_to?(:header_schema)
       merge_query_schema(callable.query_schema) if callable.respond_to?(:query_schema)
       merge_payload_schema(callable) if callable.respond_to?(:payload_schema)
       callable
+    end
+
+    def merge_header_schema(sc)
+      @header_schema += sc
     end
 
     # Merges a query schema from a step into the endpoint's query schema.

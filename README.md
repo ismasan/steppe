@@ -12,18 +12,6 @@ implementation
 * Content Negotiation - Handles multiple response formats through a Responder system that matches status codes and content types
 * Mountable on Rack routers, and (soon) standalone with its own router.
 
-## Installation
-
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
-
-Install the gem and add to the application's Gemfile by executing:
-
-    $ bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
-
-If bundler is not being used to manage dependencies, install the gem by executing:
-
-    $ gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
-
 ## Usage
 
 ### Defining a service
@@ -510,6 +498,351 @@ e.respond 200, :json, UserSerializer
 e.respond 200, 'text/*', UserTextSerializer
 ```
 
+### Security Schemes (authentication and authorization)
+
+Steppe follows the same design as [OpenAPI security schemes](https://swagger.io/docs/specification/v3_0/authentication/).
+
+A service defines one or more security schemes, which can then be opted-in either by individual endpoints, or for all endpoints at once.
+
+```ruby
+UsersAPI = Steppe::Service.new do |api|
+  api.title = 'Users API'
+  api.description = 'API for managing users'
+  api.server(
+    url: 'http://localhost:9292',
+    description: 'local server'
+  )
+
+  # Register the pre-defined Bearer token scheme
+  # give is a name that can be used by endpoints using this scheme
+  # and an access token store (can be a Hash, or anything implementing
+  # the TokenStore interface, see below)
+  api.bearer_auth
+    'BearerToken',
+    store: {
+      'admintoken' => %w[users:read users:write],
+      'publictoken' => %w[users:read],
+    }
+  )
+
+  # Endpoint definitions here
+  api.get :list_users, '/users' do |e|
+    # etc
+  end
+
+  api.post :create_user, '/users' do |e|
+    # etc
+  end
+end
+```
+
+#### 1.a Per-endpoint security
+
+```ruby
+  # Define endpoints in this service.
+  # Each endpoint can opt-in to using the 'BearerToken' security scheme
+  # defined above.
+  api.get :list_users, '/users' do |e|
+    e.description = 'List users'
+
+    # This endpoint uses the 'BearerToken' security scheme
+    # and enforces the 'users:read' scope
+    e.security 'BearerToken', ['users:read']
+    # etc
+  end
+```
+
+A request without the Authorization header responds with 401
+
+```
+curl -i http://localhost:9292/users
+
+HTTP/1.1 401 Unauthorized
+content-type: application/json
+vary: Origin
+content-length: 47
+
+{"http":{"status":401},"params":{},"errors":{}}
+```
+
+A request with the wrong access token responds with 403
+
+```
+curl -i -H "Authorization: Bearer nope" http://localhost:9292/users
+
+HTTP/1.1 401 Unauthorized
+content-type: application/json
+vary: Origin
+content-length: 47
+
+{"http":{"status":401},"params":{},"errors":{}}
+```
+
+A response with valid token succeeds
+
+```
+curl -i -H "Authorization: Bearer publictoken" http://localhost:9292/users
+
+HTTP/1.1 200 OK
+content-type: application/json
+vary: Origin
+content-length: 262
+
+{"users":[{"id":1,"name":"Alice","age":30,"email":"alice@server.com","address":"123 Great St"},{"id":2,"name":"Bob","age":25,"email":"bob@server.com","address":"23 Long Ave."},{"id":3,"name":"Bill","age":20,"email":"bill@server.com","address":"Bill's Mansion"}]}
+```
+
+#### 1.b. Service-level security
+
+Using the `#security` method at the service level registers that scheme for all endpoints defined after that
+
+```ruby
+UsersAPI = Steppe::Service.new do |api|
+  # etc
+  # Define the security scheme
+  api.bearer_auth('BearerToken', ...)
+
+  # Now apply the scheme to all endpoints in this service, with the same scopes
+  api.security 'BearerToken', ['users:read']
+
+  # all endpoints here enforce a bearer token with scope 'users:read'
+  api.get :list_users, '/users'
+  api.post :create_user, '/users'
+  # etc
+end
+```
+
+Note that the order of the `security` invocation matters. 
+The following example defines an un-authenticated `:root` endpoint, and then protects all further endpoints with the 'BearerToken` scheme.
+
+```ruby
+api.get :root, '/' # <= public endpoint
+
+api.security 'BearerToken', ['users:read'] # <= applies to all endpoints after this
+
+api.get :list_users, '/users'
+api.post :create_user, '/users'
+```
+
+#### Automatic OpenAPI docs
+
+The OpenAPI endpoint mounted via `api.specs('/openapi.json')` will include these security schemas.
+This is how that shows in the [SwaggerUI](https://swagger.io/tools/swagger-ui/) tool.
+
+<img width="922" height="812" alt="CleanShot 2025-10-11 at 23 46 02" src="https://github.com/user-attachments/assets/3bdecb81-8248-4437-a78a-c80dd7d44ebd" />
+
+
+#### Custom bearer token store
+
+The `TokenStore` interface expected by the built-in Bearer token security scheme must implement the following interface:
+
+```ruby
+#get(request_token String) => AccessToken | nil
+```
+
+The returned `AccessToken` interface must support:
+
+```
+#allows?(required_endpoint_scopes Array<String>) => Boolean
+```
+
+This is an example of a custom implementation using Redis to lookup scopes for access tokens
+
+```ruby
+class RedisTokenStore
+  def initialize(redis)
+    @redis = redis
+  end
+  
+  def get(token)
+    scopes = @redis.smembers("token:#{token}:scopes")
+    return nil if scopes.empty?
+    AccessToken.new(scopes)
+  end
+
+  class AccessToken
+    def initialize(scopes)
+      @scopes = scopes
+    end
+
+    def allows?(required_scopes)
+      (@scopes & required_scopes).any?
+    end
+  end
+end
+```
+
+And then use it to configure the security scheme in your service
+
+```ruby
+api.bearer_auth 'BearerToken', store: RedisTokenStore.new(REDIS)
+```
+
+You can also implement stores to fetch tokens from a database, or to decode JWT tokens with a secret, etc.
+
+#### Custom security schemes
+
+`Service#bearer_auth` is a shortcut to register built-in security schemes. You can use `Service#security_scheme` to register custom implementations.
+
+```ruby
+api.security_scheme MyCustomAuthentication.new(name: 'BulletProof')
+```
+
+The custom security scheme is expected to implement the following interface:
+
+```
+#name() => String
+#handle(Steppe::Result) => Steppe::Result
+#to_openapi() => Hash
+```
+
+An example:
+
+```ruby
+class MyCustomAuthentication
+  HEADER_NAME = 'X-API-Key'
+  
+  attr_reader :name
+  
+  def initialize(name:)
+    @name = name
+  end
+  
+   # @param conn [Steppe::Result::Continue]
+   # @return [Steppe::Result::Continue, Steppe::Result::Halt]
+  def handle(conn)
+     api_token = conn.request.env[HEADER_NAME]
+     return conn.respond_with(401).halt if api_token.nil?
+     
+     return conn.respond_with(403).halt if api_token != 'super-secure-token'
+     
+     # all good, continue handling the request
+     conn
+  end
+  
+  # This data will be included in the OpenAPI specification
+  # for this security scheme
+  # @see https://swagger.io/docs/specification/v3_0/authentication/
+  # @return [Hash]
+  def to_openapi
+    {
+      'type' => 'apiKey',
+      'in' => 'header',
+      'name' => HEADER_NAME
+    }
+  end
+end
+```
+
+Security schemes can optionally implement `#query_schema`, `#payload_schemas` and `#header_schema`, which will be merged onto the endpoint's equivalents, and automatically added to OpenAPI documentation.
+
+### 2. Header schemas
+
+This PR also adds an `Endpoint#header_schema` which allows to define schemas to validate and/or coerce request headers.
+
+```ruby
+api.get :list_users, '/users' do |e|
+  # Coerce some expected request headers
+  # This coerces the APIVersion header to a number
+  e.header_schema(
+    'APIVersion' => Steppe::Types::Lax::Numeric
+  )
+  
+  # Downstream handlers will get a numeric header value
+  e.step do |conn|
+    Logger.info conn.request.env['APIVersion'] # a number
+    conn
+  end
+end
+```
+
+These header schemas are inclusive: they don't remove other headers not included in the schemas.
+
+They also generate OpenAPI docs.
+
+<img width="850" height="595" alt="CleanShot 2025-10-11 at 23 59 05" src="https://github.com/user-attachments/assets/c25e65f7-8733-42d9-a1b6-b93d815e2981" />
+
+#### Header schema order matters
+
+Like most things in Steppe, query schemas are registered as steps in a pipeline, so the order of registration matters.
+
+```ruby
+# No header schema coercion yet, the header is a string here.
+e.step do |conn|
+  Logger.info conn.request.env['APIVersion'] # a STRING
+  conn
+end
+
+# Register the schema as a step in the endpoint's pipeline
+e.header_schema(
+    'APIVersion' => Steppe::Types::Lax::Numeric
+)
+
+# By the time this new step runs
+# the header schema above has coerced the headers
+e.step do |conn|
+  Logger.info conn.request.env['APIVersion'] # a NUMBER
+  conn
+end
+```
+
+#### Multiple header schemas
+
+Like with `#query_schema` and `#payload_schema`, `#header_schema` can be invoked multiple times, which will register individual validation steps, but it will also merge those schemas into the top-level `Endpoint#header_schema`, which goes into OpenAPI docs.
+
+```ruby
+api.get :list_users, '/users' do |e|
+  e.header_schema('ApiVersion' => Steppe::Types::Lax::Numeric)
+  # some more steps
+  e.step SomeHandler
+  # add to endpoint's header schema
+  e.header_schema('HTTP_AUTHORIZATION' => JWTParser)
+  # more steps ...
+end
+
+# Endpoint's header_schema includes all fields
+UserAPI[:list_users].header_schema
+# is a 
+Steppe::Types::Hash[
+   'ApiVersion' => Steppe::Types::Lax::Numeric,
+   'HTTP_AUTHORISATION' => JWTParser
+]
+```
+
+#### Header schema composition
+
+Custom steps that define their own `#header_schema` will also have their schemas merged into the endpoint's `#header_schema`, and automatically documented in OpenAPI.
+
+```ruby
+class ListUsersAction
+  HEADER_SCHEMA = Steppe::Types::Hash['ClientVersion' => String]
+  
+  # responding to this method will cause
+  # Steppe to merge this schema into the endpoint's
+  def header_schema = HEADER_SCHEMA
+  
+  # The Step interface to handle requests
+  def call(conn)
+    Logger.info conn.request.env['ClientVersion']
+    # do something
+    users = User.page(conn.params[:page])
+    conn.valid users
+  end
+end
+```
+
+Note that this also applies to Security Schemes above. For example, the built-in `Steppe::Auth::Bearer` scheme defines a header schema to declare the `Authorization` header.
+
+## Installation
+
+TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+
+Install the gem and add to the application's Gemfile by executing:
+
+    $ bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+
+If bundler is not being used to manage dependencies, install the gem by executing:
+
+    $ gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
 
 
 ## Development

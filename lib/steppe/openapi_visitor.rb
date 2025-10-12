@@ -31,7 +31,8 @@ module Steppe
         },
         'servers' => node.servers.map { |s| visit(s) },
         'tags' => node.tags.map { |s| visit(s) },
-        'paths' => node.endpoints.reduce({}) { |memo, e| visit(e, memo) }
+        'paths' => node.endpoints.reduce({}) { |memo, e| visit(e, memo) },
+        'components' => { 'securitySchemes' => visit_security_schemes(node.security_schemes) }
       )
     end
 
@@ -58,7 +59,8 @@ module Steppe
         'operationId' => node.rel_name.to_s,
         'description' => node.description,
         'tags' => node.tags,
-        'parameters' => visit_parameters(node.query_schema),
+        'security' => visit_endpoint_security(node.registered_security_schemes),
+        'parameters' => visit_parameters(node.query_schema, node.header_schema),
         'requestBody' => visit_request_body(node.payload_schemas),
         'responses' => visit(node.responders)
       )
@@ -100,11 +102,15 @@ module Steppe
 
     PARAMETERS_IN = %i[query path].freeze
 
-    def visit_parameters(schema)
-      specs = schema._schema.each.with_object({}) do |(name, type), h|
+    def visit_endpoint_security(schemes)
+      schemes.map { |name, scopes| { name => scopes } }
+    end
+
+    def visit_parameters(query_schema, header_schema)
+      specs = query_schema._schema.each.with_object({}) do |(name, type), h|
         h[name.to_s] = type if PARAMETERS_IN.include?(type.metadata[:in])
       end
-      specs.map do |name, type|
+      params = specs.map do |name, type|
         spec = visit(type)
 
         ins = spec.delete('in')&.to_s
@@ -118,6 +124,18 @@ module Steppe
           'schema' => spec.except('in', 'desc', 'options')
         }.compact
       end
+
+      header_schema._schema.each.with_object(params) do |(key, type), list|
+        spec = visit(type)
+        list << { 
+          'name' => key.to_s, 
+          'in' => 'header', 
+          'description' => spec.delete('description'),
+          'example' => spec.delete('example'),
+          'required' => !key.optional?,
+          'schema' => spec.except('in', 'desc', 'options')
+        }.compact
+      end
     end
 
     def visit_request_body(schemas)
@@ -128,6 +146,10 @@ module Steppe
       end
 
       { 'required' => true, 'content' => content }
+    end
+
+    def visit_security_schemes(schemes)
+      schemes.transform_values(&:to_openapi)
     end
   end
 end

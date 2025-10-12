@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'steppe/auth'
+
 module Steppe
   class Service
     VERBS = %i[get post put patch delete].freeze
@@ -18,7 +20,7 @@ module Steppe
       def node_name = :tag
     end
 
-    attr_reader :node_name, :servers, :tags
+    attr_reader :node_name, :servers, :tags, :security_schemes, :registered_security_schemes
     attr_accessor :title, :description, :version
 
     def initialize(&)
@@ -29,6 +31,8 @@ module Steppe
       @node_name = :service
       @servers = []
       @tags = []
+      @security_schemes = {}
+      @registered_security_schemes = {}
       yield self if block_given?
       freeze
     end
@@ -43,6 +47,95 @@ module Steppe
 
     def tag(name, description: nil, external_docs: nil)
       @tags << Tag.parse(name:, description:, external_docs:)
+      self
+    end
+
+    # Register a Bearer token authentication security scheme.
+    # This is a convenience method that creates a Bearer auth scheme and registers it.
+    #
+    # @see https://swagger.io/docs/specification/v3_0/authentication/
+    # @see Auth::Bearer
+    #
+    # @param name [String] The security scheme name (used to reference in endpoints)
+    # @param store [Hash, Auth::TokenStoreInterface] Token store mapping tokens to scopes.
+    #   Can be a Hash (converted to HashTokenStore) or a custom store implementing the TokenStoreInterface.
+    # @param format [String] Bearer token format hint for documentation (e.g., 'JWT', 'opaque')
+    # @return [self] Returns self for method chaining
+    #
+    # @example Basic usage with hash store
+    #   service.bearer_auth 'api_key', store: {
+    #     'token123' => ['read:users', 'write:users'],
+    #     'token456' => ['read:posts']
+    #   }
+    #
+    # @example With JWT format hint
+    #   service.bearer_auth 'jwt_auth', store: my_token_store, format: 'JWT'
+    def bearer_auth(name, store: {}, format: 'string')
+      store = Auth::HashTokenStore.wrap(store)
+      security_scheme Auth::Bearer.new(name, store:, format:)
+    end
+
+    # Register a security scheme for use in endpoints.
+    # Security schemes define authentication methods that can be applied to endpoints.
+    #
+    # @see https://swagger.io/docs/specification/v3_0/authentication/
+    # @see Auth::SecuritySchemeInterface
+    #
+    # @param scheme [Auth::SecuritySchemeInterface] A security scheme object implementing the SecuritySchemeInterface
+    # @return [self] Returns self for method chaining
+    #
+    # @example Register a custom security scheme
+    #   bearer = Steppe::Auth::Bearer.new('my_auth', store: token_store)
+    #   service.security_scheme(bearer)
+    #
+    # @example Register and use in an endpoint
+    #   service.bearer_auth 'api_key', store: { 'token123' => ['read:users'] }
+    #   service.get :users, '/users' do |e|
+    #     e.security 'api_key', ['read:users']
+    #     # ... endpoint definition
+    #   end
+    def security_scheme(scheme)
+      scheme => Auth::SecuritySchemeInterface
+      @security_schemes[scheme.name] = scheme
+      self
+    end
+
+    # Apply a security requirement globally to endpoints defined after this call.
+    # This registers a security scheme with required scopes at the service level,
+    # making it apply to all endpoints defined after this method is called.
+    #
+    # IMPORTANT: Order matters! This method only applies security to endpoints
+    # defined AFTER it is called, not to endpoints defined before.
+    #
+    # @see https://swagger.io/docs/specification/v3_0/authentication/
+    # @see Endpoint#security
+    #
+    # @param scheme_name [String] The name of a registered security scheme
+    # @param scopes [Array<String>] Required scopes for this security requirement
+    # @return [self] Returns self for method chaining
+    # @raise [KeyError] If the security scheme has not been registered
+    #
+    # @example Apply Bearer auth globally to all endpoints defined after
+    #   service.bearer_auth 'api_key', store: {
+    #     'token123' => ['read:users', 'write:users']
+    #   }
+    #   service.security 'api_key', ['read:users']
+    #   # All endpoints defined below will require this security
+    #
+    # @example Order matters - security only applies to endpoints after the call
+    #   service.bearer_auth 'api_key', store: tokens
+    #   service.get :public_endpoint, '/public' { }  # No security required
+    #   service.security 'api_key', ['read:users']
+    #   service.get :protected_endpoint, '/protected' { }  # Security required
+    #
+    # @example Multiple security schemes
+    #   service.bearer_auth 'api_key', store: tokens
+    #   service.bearer_auth 'admin_key', store: admin_tokens
+    #   service.security 'api_key', ['read:users']
+    #   service.security 'admin_key', ['admin']
+    def security(scheme_name, scopes)
+      scheme = security_schemes.fetch(scheme_name)
+      @registered_security_schemes[scheme_name] = scopes
       self
     end
 
@@ -95,7 +188,7 @@ module Steppe
 
     VERBS.each do |verb|
       define_method(verb) do |name, path, &block|
-        @lookup[name] = Endpoint.new(name, verb, path:, &block)
+        @lookup[name] = Endpoint.new(self, name, verb, path:, &block)
         self
       end
     end
