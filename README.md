@@ -68,7 +68,70 @@ api.get :users, '/users' do |e|
 end
 ```
 
-### Request Body Validation
+### Query schemas
+
+Use `#query_schema` to register steps to coerce and validate URL path and query parameters.
+
+```ruby
+api.get :list_users, '/users' do |e|
+  e.description = 'List and filter users'
+  # URL path and query parameters will be passed through this schema
+  # You can annotate fields with .desc() and .example() to supplement
+  # the generated OpenAPI specs
+  e.query_schema(
+    q?: Types::String.desc('full text search').example('bo, media'),
+    status?: Types::String.desc('status filter').options(%w[active inactive])
+  )
+  
+  # coerced and validated parameters are now
+  # available in conn.params
+  e.step do |conn|
+    users = User
+    users = users.search(conn.params[:q]) if conn.params[:q]
+    users = users.by_status(conn.params[:status]) if conn.params[:status]
+    conn.valid users
+  end
+end
+
+# GET /users?status=active&q=bob
+```
+
+#### Path parameters
+
+URL path parameters are automatically extracted and merged into a default query schema:
+
+```ruby
+# the presence of path tokens in path, such as :id
+# will automatically register #query_schema(id: Types::String)
+api.get :user, '/users/:id' do |e|
+  e.description = 'Fetch a user by ID'
+  e.step do |conn|
+    # conn.params[:id] is a string
+    user = User.find(conn.params[:id])
+    user ? conn.valid(user) : conn.invalid(errors: { id: 'Not found' })
+  end
+
+  e.json 200...300, UserSerializer
+end
+```
+
+You can extend the implicit query schema to add or update individual fields
+
+```ruby
+# Override the implicit :id field 
+# to coerce it to an integer
+e.query_schema(
+  id: Types::Lax::Integer  
+)
+```
+
+Multiple calls to `#query_schema` will aggregate into a single `Endpoint#query_schema`
+
+```ruby
+UsersAPI[:user].query_schema # => Plumb::Types::Hash
+```
+
+### Payload schemas
 
 Use `payload_schema` to validate request bodies:
 
@@ -141,8 +204,6 @@ end
 e.step FindAndAuthorizeUser
 ```
 
-
-
 It's up to you how/if your custom steps manage their own state (ie. classes vs. instances). You can use instances for configuration, for example.
 
 ```ruby
@@ -200,28 +261,6 @@ e.step CreateUser
 e.payload_schema(
   email: Types::Email.present
 )
-```
-
-### URL Parameters
-
-URL parameters are automatically extracted and merged into `conn.params`:
-
-```ruby
-api.get :user, '/users/:id' do |e|
-  e.description = 'Fetch a user by ID'
-
-  # Validate URL parameter
-  e.query_schema(
-    id: Types::Lax::Integer.desc('User ID')
-  )
-
-  e.step do |conn|
-    user = User.find(conn.params[:id])
-    user ? conn.valid(user) : conn.invalid(errors: { id: 'Not found' })
-  end
-
-  e.json 200...300, UserSerializer
-end
 ```
 
 ### File Uploads
@@ -498,6 +537,103 @@ e.respond 200, :json, UserSerializer
 e.respond 200, 'text/*', UserTextSerializer
 ```
 
+### Header schemas
+
+ `Endpoint#header_schema` is similar to `#query_schema` and `#payload_schema`, and it allows to define schemas to validate and/or coerce request headers.
+
+```ruby
+api.get :list_users, '/users' do |e|
+  # Coerce some expected request headers
+  # This coerces the APIVersion header to a number
+  e.header_schema(
+    'APIVersion' => Steppe::Types::Lax::Numeric
+  )
+  
+  # Downstream handlers will get a numeric header value
+  e.step do |conn|
+    Logger.info conn.request.env['APIVersion'] # a number
+    conn
+  end
+end
+```
+
+These header schemas are inclusive: they don't remove other headers not included in the schemas.
+
+They also generate OpenAPI docs.
+
+<img width="850" height="595" alt="CleanShot 2025-10-11 at 23 59 05" src="https://github.com/user-attachments/assets/c25e65f7-8733-42d9-a1b6-b93d815e2981" />
+
+#### Header schema order matters
+
+Like most things in Steppe, query schemas are registered as steps in a pipeline, so the order of registration matters.
+
+```ruby
+# No header schema coercion yet, the header is a string here.
+e.step do |conn|
+  Logger.info conn.request.env['APIVersion'] # a STRING
+  conn
+end
+
+# Register the schema as a step in the endpoint's pipeline
+e.header_schema(
+    'APIVersion' => Steppe::Types::Lax::Numeric
+)
+
+# By the time this new step runs
+# the header schema above has coerced the headers
+e.step do |conn|
+  Logger.info conn.request.env['APIVersion'] # a NUMBER
+  conn
+end
+```
+
+#### Multiple header schemas
+
+Like with `#query_schema` and `#payload_schema`, `#header_schema` can be invoked multiple times, which will register individual validation steps, but it will also merge those schemas into the top-level `Endpoint#header_schema`, which goes into OpenAPI docs.
+
+```ruby
+api.get :list_users, '/users' do |e|
+  e.header_schema('ApiVersion' => Steppe::Types::Lax::Numeric)
+  # some more steps
+  e.step SomeHandler
+  # add to endpoint's header schema
+  e.header_schema('HTTP_AUTHORIZATION' => JWTParser)
+  # more steps ...
+end
+
+# Endpoint's header_schema includes all fields
+UserAPI[:list_users].header_schema
+# is a 
+Steppe::Types::Hash[
+   'ApiVersion' => Steppe::Types::Lax::Numeric,
+   'HTTP_AUTHORISATION' => JWTParser
+]
+```
+
+#### Header schema composition
+
+Custom steps that define their own `#header_schema` will also have their schemas merged into the endpoint's `#header_schema`, and automatically documented in OpenAPI.
+
+```ruby
+class ListUsersAction
+  HEADER_SCHEMA = Steppe::Types::Hash['ClientVersion' => String]
+  
+  # responding to this method will cause
+  # Steppe to merge this schema into the endpoint's
+  def header_schema = HEADER_SCHEMA
+  
+  # The Step interface to handle requests
+  def call(conn)
+    Logger.info conn.request.env['ClientVersion']
+    # do something
+    users = User.page(conn.params[:page])
+    conn.valid users
+  end
+end
+```
+
+Note that this also applies to Security Schemes above. For example, the built-in `Steppe::Auth::Bearer` scheme defines a header schema to declare the `Authorization` header.
+
 ### Security Schemes (authentication and authorization)
 
 Steppe follows the same design as [OpenAPI security schemes](https://swagger.io/docs/specification/v3_0/authentication/).
@@ -734,103 +870,6 @@ end
 ```
 
 Security schemes can optionally implement `#query_schema`, `#payload_schemas` and `#header_schema`, which will be merged onto the endpoint's equivalents, and automatically added to OpenAPI documentation.
-
-### 2. Header schemas
-
-This PR also adds an `Endpoint#header_schema` which allows to define schemas to validate and/or coerce request headers.
-
-```ruby
-api.get :list_users, '/users' do |e|
-  # Coerce some expected request headers
-  # This coerces the APIVersion header to a number
-  e.header_schema(
-    'APIVersion' => Steppe::Types::Lax::Numeric
-  )
-  
-  # Downstream handlers will get a numeric header value
-  e.step do |conn|
-    Logger.info conn.request.env['APIVersion'] # a number
-    conn
-  end
-end
-```
-
-These header schemas are inclusive: they don't remove other headers not included in the schemas.
-
-They also generate OpenAPI docs.
-
-<img width="850" height="595" alt="CleanShot 2025-10-11 at 23 59 05" src="https://github.com/user-attachments/assets/c25e65f7-8733-42d9-a1b6-b93d815e2981" />
-
-#### Header schema order matters
-
-Like most things in Steppe, query schemas are registered as steps in a pipeline, so the order of registration matters.
-
-```ruby
-# No header schema coercion yet, the header is a string here.
-e.step do |conn|
-  Logger.info conn.request.env['APIVersion'] # a STRING
-  conn
-end
-
-# Register the schema as a step in the endpoint's pipeline
-e.header_schema(
-    'APIVersion' => Steppe::Types::Lax::Numeric
-)
-
-# By the time this new step runs
-# the header schema above has coerced the headers
-e.step do |conn|
-  Logger.info conn.request.env['APIVersion'] # a NUMBER
-  conn
-end
-```
-
-#### Multiple header schemas
-
-Like with `#query_schema` and `#payload_schema`, `#header_schema` can be invoked multiple times, which will register individual validation steps, but it will also merge those schemas into the top-level `Endpoint#header_schema`, which goes into OpenAPI docs.
-
-```ruby
-api.get :list_users, '/users' do |e|
-  e.header_schema('ApiVersion' => Steppe::Types::Lax::Numeric)
-  # some more steps
-  e.step SomeHandler
-  # add to endpoint's header schema
-  e.header_schema('HTTP_AUTHORIZATION' => JWTParser)
-  # more steps ...
-end
-
-# Endpoint's header_schema includes all fields
-UserAPI[:list_users].header_schema
-# is a 
-Steppe::Types::Hash[
-   'ApiVersion' => Steppe::Types::Lax::Numeric,
-   'HTTP_AUTHORISATION' => JWTParser
-]
-```
-
-#### Header schema composition
-
-Custom steps that define their own `#header_schema` will also have their schemas merged into the endpoint's `#header_schema`, and automatically documented in OpenAPI.
-
-```ruby
-class ListUsersAction
-  HEADER_SCHEMA = Steppe::Types::Hash['ClientVersion' => String]
-  
-  # responding to this method will cause
-  # Steppe to merge this schema into the endpoint's
-  def header_schema = HEADER_SCHEMA
-  
-  # The Step interface to handle requests
-  def call(conn)
-    Logger.info conn.request.env['ClientVersion']
-    # do something
-    users = User.page(conn.params[:page])
-    conn.valid users
-  end
-end
-```
-
-Note that this also applies to Security Schemes above. For example, the built-in `Steppe::Auth::Bearer` scheme defines a header schema to declare the `Authorization` header.
 
 ## Installation
 
