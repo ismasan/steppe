@@ -14,6 +14,9 @@ module Steppe
     #   # In a service definition:
     #   api.security_scheme bearer
     #
+    #   # Or use the shortcut
+    #   api.bearer_auth 'my_auth', store: { 'token123' => ['read:users'] }
+    #
     #   # Then in an endpoint in the service:
     #   e.security 'my_auth', ['read:users']
     #
