@@ -85,6 +85,8 @@ module Steppe
           dl {
             dt "Response status:"
             dd conn.response.status.to_s
+            dt "Parameters:"
+            dd conn.params.inspect
             dt "Errors:"
             dd conn.errors.inspect
           }
