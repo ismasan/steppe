@@ -645,6 +645,8 @@ Steppe follows the same design as [OpenAPI security schemes](https://swagger.io/
 
 A service defines one or more security schemes, which can then be opted-in either by individual endpoints, or for all endpoints at once.
 
+Steppe provides two built-in schemes: **Bearer token** authentication (with scopes) and **Basic** HTTP authentication. More coming later.
+
 ```ruby
 UsersAPI = Steppe::Service.new do |api|
   api.title = 'Users API'
@@ -654,15 +656,21 @@ UsersAPI = Steppe::Service.new do |api|
     description: 'local server'
   )
 
-  # Register the pre-defined Bearer token scheme
-  # give is a name that can be used by endpoints using this scheme
-  # and an access token store (can be a Hash, or anything implementing
-  # the TokenStore interface, see below)
-  api.bearer_auth
+  # Bearer token authentication with scopes
+  api.bearer_auth(
     'BearerToken',
     store: {
       'admintoken' => %w[users:read users:write],
       'publictoken' => %w[users:read],
+    }
+  )
+
+  # Basic HTTP authentication (username/password)
+  api.basic_auth(
+    'BasicAuth',
+    store: {
+      'admin' => 'secret123',
+      'user' => 'password456'
     }
   )
 
@@ -680,15 +688,20 @@ end
 #### 1.a Per-endpoint security
 
 ```ruby
-  # Define endpoints in this service.
-  # Each endpoint can opt-in to using the 'BearerToken' security scheme
-  # defined above.
+  # Each endpoint can opt-in to using registered security schemes
   api.get :list_users, '/users' do |e|
     e.description = 'List users'
 
-    # This endpoint uses the 'BearerToken' security scheme
-    # and enforces the 'users:read' scope
+    # Bearer auth with scopes
     e.security 'BearerToken', ['users:read']
+    # etc
+  end
+
+  api.post :create_user, '/users' do |e|
+    e.description = 'Create user'
+
+    # Basic auth (no scopes)
+    e.security 'BasicAuth'
     # etc
   end
 ```
@@ -771,48 +784,11 @@ This is how that shows in the [SwaggerUI](https://swagger.io/tools/swagger-ui/) 
 
 <img width="922" height="812" alt="CleanShot 2025-10-11 at 23 46 02" src="https://github.com/user-attachments/assets/3bdecb81-8248-4437-a78a-c80dd7d44ebd" />
 
+#### Custom bearer token store or basic credential stores
 
-#### Custom bearer token store
+See the comments and interfaces in `lib/steppe/auth/*` to learn how to provide custom credential stores to the built-in security schemes. For example to store and fetch credentials from a database or file. 
 
-The `TokenStore` interface expected by the built-in Bearer token security scheme must implement the following interface:
-
-```ruby
-#get(request_token String) => AccessToken | nil
-```
-
-The returned `AccessToken` interface must support:
-
-```
-#allows?(required_endpoint_scopes Array<String>) => Boolean
-```
-
-This is an example of a custom implementation using Redis to lookup scopes for access tokens
-
-```ruby
-class RedisTokenStore
-  def initialize(redis)
-    @redis = redis
-  end
-  
-  def get(token)
-    scopes = @redis.smembers("token:#{token}:scopes")
-    return nil if scopes.empty?
-    AccessToken.new(scopes)
-  end
-
-  class AccessToken
-    def initialize(scopes)
-      @scopes = scopes
-    end
-
-    def allows?(required_scopes)
-      (@scopes & required_scopes).any?
-    end
-  end
-end
-```
-
-And then use it to configure the security scheme in your service
+As an example:
 
 ```ruby
 api.bearer_auth 'BearerToken', store: RedisTokenStore.new(REDIS)
@@ -822,7 +798,7 @@ You can also implement stores to fetch tokens from a database, or to decode JWT 
 
 #### Custom security schemes
 
-`Service#bearer_auth` is a shortcut to register built-in security schemes. You can use `Service#security_scheme` to register custom implementations.
+`Service#bearer_auth` and `#basic_auth` are shortcuts to register built-in security schemes. You can use `Service#security_scheme` to register custom implementations.
 
 ```ruby
 api.security_scheme MyCustomAuthentication.new(name: 'BulletProof')
@@ -832,7 +808,7 @@ The custom security scheme is expected to implement the following interface:
 
 ```
 #name() => String
-#handle(Steppe::Result) => Steppe::Result
+#handle(Steppe::Result, endpoint_expected_scopes) => Steppe::Result
 #to_openapi() => Hash
 ```
 
@@ -849,8 +825,9 @@ class MyCustomAuthentication
   end
   
    # @param conn [Steppe::Result::Continue]
+   # @param endpoint_scopes [Array<String>] scopes expected by this endpoint (if any)
    # @return [Steppe::Result::Continue, Steppe::Result::Halt]
-  def handle(conn)
+  def handle(conn, _endpoint_scopes)
      api_token = conn.request.env[HEADER_NAME]
      return conn.respond_with(401).halt if api_token.nil?
      

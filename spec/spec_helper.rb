@@ -11,6 +11,11 @@ module TestHelpers
     Steppe::Result::Continue.new(value, request:)
   end
 
+  def conn_with(...)
+    request = build_request(...)
+    Steppe::Result::Continue.new(nil, request:)
+  end
+
   def build_request(path, query: {}, body: nil, headers: {}, accepts: 'application/json', content_type: nil)
     content_type ||= accepts
 

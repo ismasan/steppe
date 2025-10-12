@@ -75,6 +75,25 @@ module Steppe
       def errors = result.errors
     end
 
+    DefaultHTMLSerializer = -> (conn) {
+      html5 {
+        head {
+          title "Default #{conn.response.status}"
+        }
+        body {
+          h1 "Default view"
+          dl {
+            dt "Response status:"
+            dd conn.response.status.to_s
+            dt "Parameters:"
+            dd conn.params.inspect
+            dt "Errors:"
+            dd conn.errors.inspect
+          }
+        }
+      }
+    }
+
     # Internal step that validates HTTP headers against a schema.
     # Validates headers from the Rack env and merges validated values back into the env.
     # Returns 422 Unprocessable Entity if validation fails.
@@ -264,6 +283,7 @@ module Steppe
       # TODO: match any content type
       # respond 304, '*/*'
       respond 401..422, :json, DefaultEntitySerializer
+      respond 401..422, :html, DefaultHTMLSerializer
       freeze
     end
 
@@ -298,11 +318,11 @@ module Steppe
     end
 
     # Apply a security scheme to this endpoint with required scopes.
-    # The security scheme must be registered in the parent Service using #security_scheme or #bearer_auth.
+    # The security scheme must be registered in the parent Service using #security_scheme, #bearer_auth, or #basic_auth.
     # This adds a processing step that validates authentication/authorization before other endpoint logic runs.
     #
     # @param scheme_name [String] Name of the security scheme (must match a registered scheme)
-    # @param scopes [Array<String>] Required permission scopes for this endpoint
+    # @param scopes [Array<String>] Required permission scopes for this endpoint (not used for Basic auth)
     # @return [void]
     #
     # @raise [KeyError] If the security scheme is not registered in the parent service
@@ -318,7 +338,19 @@ module Steppe
     #     e.json 200, UserListSerializer
     #   end
     #
-    # @example Multiple scopes required
+    # @example Basic HTTP authentication
+    #   service.basic_auth 'BasicAuth', store: {
+    #     'admin' => 'secret123',
+    #     'user' => 'password456'
+    #   }
+    #
+    #   service.get :protected, '/protected' do |e|
+    #     e.security 'BasicAuth'  # Basic auth doesn't use scopes
+    #     e.step { |result| result.continue(data: { message: 'Protected resource' }) }
+    #     e.json 200
+    #   end
+    #
+    # @example Multiple scopes required (Bearer only)
     #   service.get :admin_users, '/admin/users' do |e|
     #     e.security 'api_key', ['read:users', 'admin:access']
     #     # ... endpoint definition
@@ -328,8 +360,10 @@ module Steppe
     # @note If authorization fails (missing required scopes), returns 403 Forbidden
     # @see Service#security_scheme
     # @see Service#bearer_auth
+    # @see Service#basic_auth
     # @see Auth::Bearer#handle
-    def security(scheme_name, scopes)
+    # @see Auth::Basic#handle
+    def security(scheme_name, scopes = [])
       scheme = service.security_schemes.fetch(scheme_name)
       scheme_step = SecurityStep.new(scheme, scopes:)
       @registered_security_schemes[scheme.name] = scopes

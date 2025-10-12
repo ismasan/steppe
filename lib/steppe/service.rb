@@ -71,8 +71,44 @@ module Steppe
     # @example With JWT format hint
     #   service.bearer_auth 'jwt_auth', store: my_token_store, format: 'JWT'
     def bearer_auth(name, store: {}, format: 'string')
-      store = Auth::HashTokenStore.wrap(store)
       security_scheme Auth::Bearer.new(name, store:, format:)
+    end
+
+    # Register a Basic HTTP authentication security scheme.
+    # This is a convenience method that creates a Basic auth scheme and registers it.
+    #
+    # @see https://swagger.io/docs/specification/v3_0/authentication/
+    # @see Auth::Basic
+    #
+    # @param name [String] The security scheme name (used to reference in endpoints)
+    # @param store [Hash, Auth::Basic::CredentialsStoreInterface] Credentials store mapping usernames to passwords.
+    #   Can be a Hash (converted to SimpleUserPasswordStore) or a custom store implementing the CredentialsStoreInterface.
+    # @return [self]
+    #
+    # @example Basic usage with hash store
+    #   service.basic_auth 'BasicAuth', store: {
+    #     'admin' => 'secret123',
+    #     'user' => 'password456'
+    #   }
+    #
+    # @example With custom credentials store
+    #   class DatabaseCredentialsStore
+    #     def lookup(username)
+    #       user = User.find_by(username: username)
+    #       user&.password_digest
+    #     end
+    #   end
+    #
+    #   service.basic_auth 'BasicAuth', store: DatabaseCredentialsStore.new
+    #
+    # @example Using in an endpoint
+    #   service.basic_auth 'BasicAuth', store: { 'admin' => 'secret' }
+    #   service.get :protected, '/protected' do |e|
+    #     e.security 'BasicAuth'
+    #     # ... endpoint definition
+    #   end
+    def basic_auth(name, store: {})
+      security_scheme Auth::Basic.new(name, store:)
     end
 
     # Register a security scheme for use in endpoints.
@@ -133,7 +169,7 @@ module Steppe
     #   service.bearer_auth 'admin_key', store: admin_tokens
     #   service.security 'api_key', ['read:users']
     #   service.security 'admin_key', ['admin']
-    def security(scheme_name, scopes)
+    def security(scheme_name, scopes = [])
       scheme = security_schemes.fetch(scheme_name)
       @registered_security_schemes[scheme_name] = scopes
       self
