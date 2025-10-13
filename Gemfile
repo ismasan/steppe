@@ -24,3 +24,8 @@ end
 group :hanami do
   gem 'hanami-router', '2.3.0.beta1'
 end
+
+group :docs do
+  gem 'kramdown'
+  gem 'kramdown-parser-gfm'
+end

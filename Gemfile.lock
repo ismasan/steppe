@@ -116,6 +116,8 @@ PLATFORMS
 DEPENDENCIES
   debug
   hanami-router (= 2.3.0.beta1)
+  kramdown
+  kramdown-parser-gfm
   puma
   rack-cors
   rack-test (>= 2.1)
