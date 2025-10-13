@@ -1,3 +1,11 @@
+GIT
+  remote: https://github.com/ismasan/docco.git
+  revision: 29aa6ceabc57f226d322e9f426c6536130c67d48
+  specs:
+    docco (0.1.0)
+      kramdown
+      kramdown-parser-gfm
+
 PATH
   remote: .
   specs:
@@ -115,9 +123,8 @@ PLATFORMS
 
 DEPENDENCIES
   debug
+  docco!
   hanami-router (= 2.3.0.beta1)
-  kramdown
-  kramdown-parser-gfm
   puma
   rack-cors
   rack-test (>= 2.1)

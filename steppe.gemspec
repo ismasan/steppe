@@ -8,14 +8,14 @@ Gem::Specification.new do |spec|
   spec.authors = ['Ismael Celis']
   spec.email = ['ismaelct@gmail.com']
 
-  spec.summary       = 'Composable, self-documenting REST APIs in Ruby'
+  spec.summary       = 'Build self-documenting REST APIs big and small'
   spec.description   = 'Composable, self-documenting REST APIs in Ruby'
-  spec.homepage      = 'https://www.github.com/ismasan/steppe'
+  spec.homepage      = 'https://ismasan.github.io/steppe'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 3.0.0'
 
   spec.metadata['homepage_uri'] = spec.homepage
-  spec.metadata['source_code_uri'] = spec.homepage
+  spec.metadata['source_code_uri'] = 'https://github.com/ismasan/steppe'
   spec.metadata['changelog_uri'] = spec.homepage
 
   # Specify which files should be added to the gem when it is released.

@@ -10,6 +10,7 @@ gem 'rake', '~> 13.0'
 gem 'debug'
 gem 'rack-test', '>= 2.1'
 gem 'rspec', '~> 3.0'
+gem 'docco', github: 'ismasan/docco'
 
 group :examples do
   gem 'puma'
@@ -23,9 +24,4 @@ end
 
 group :hanami do
   gem 'hanami-router', '2.3.0.beta1'
-end
-
-group :docs do
-  gem 'kramdown'
-  gem 'kramdown-parser-gfm'
 end
