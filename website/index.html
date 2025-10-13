@@ -836,6 +836,13 @@ end</code></pre>
                         navLinks.forEach(link => link.classList.remove('active'));
                         // Add active class to current link
                         activeLink.classList.add('active');
+
+                        // Update URL hash without scrolling
+                        if (history.replaceState) {
+                            history.replaceState(null, null, `#${id}`);
+                        } else {
+                            window.location.hash = id;
+                        }
                     }
                 }
             });
