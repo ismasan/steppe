@@ -196,6 +196,51 @@ body {
     padding-left: calc(2.5rem - 3px);
 }
 
+/* Accordion Menus */
+.nav-accordion {
+    position: relative;
+}
+
+.accordion-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.accordion-icon {
+    font-size: 0.75rem;
+    transition: transform 0.2s ease;
+    margin-left: 0.5rem;
+}
+
+.nav-accordion.expanded .accordion-icon {
+    transform: rotate(-180deg);
+}
+
+.accordion-content {
+    list-style: none;
+    padding-left: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.nav-accordion.expanded .accordion-content {
+    max-height: 500px;
+}
+
+.nav-h4 a {
+    padding-left: 3.5rem;
+    font-size: 0.8125rem;
+    color: var(--sidebar-text);
+    opacity: 0.85;
+}
+
+.nav-h4 a.active {
+    padding-left: calc(3.5rem - 3px);
+}
+
 /* Main Content */
 .content {
     flex: 1;
