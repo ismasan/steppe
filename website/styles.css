@@ -249,13 +249,14 @@ pre {
     overflow-x: auto;
     border-radius: 6px;
     box-shadow: var(--shadow);
+    background-color: #282c34;
 }
 
 pre code {
     display: block;
     padding: 1.25rem;
-    background-color: var(--sidebar-bg);
-    color: #e2e8f0;
+    background-color: transparent;
+    color: inherit;
     border: none;
     border-radius: 6px;
     line-height: 1.6;
