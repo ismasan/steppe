@@ -152,6 +152,7 @@ body {
 
 .nav-menu {
     list-style: none;
+    padding-left: 0;
 }
 
 .nav-menu li {
@@ -182,6 +183,17 @@ body {
 .nav-menu a:hover {
     background-color: var(--sidebar-hover);
     color: #ffffff;
+}
+
+.nav-menu a.active {
+    background-color: var(--primary-color);
+    color: #ffffff;
+    border-left: 3px solid #ffffff;
+    padding-left: calc(1.5rem - 3px);
+}
+
+.nav-submenu a.active {
+    padding-left: calc(2.5rem - 3px);
 }
 
 /* Main Content */
