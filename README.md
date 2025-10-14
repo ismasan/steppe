@@ -818,6 +818,8 @@ Security schemes can optionally implement [#query_schema](#query-schemas), [#pay
 
 ## Mount in Rack-compliant routers
 
+`Steppe::Enpoint` instances include a `#to_rack` method that turns them into Rack apps, and they have attributes like `#path` and `#verb` which allows you to mount them onto any Rack-compliant routing library.
+
 ### Sinatra
 
 Mount Steppe services in a Sinatra app:
@@ -838,6 +840,7 @@ end
 ### `Hanami::Router`
 
 The excellent and fast [Hanami::Router]() can be used as a standalone router for Steppe services. Or you can mount them into an existing Hanami app.
+Use the `Steppe::Service#route_with` helper to mount all endpoints in a service at once.
 
 ```ruby
 # hanami_service.ru
