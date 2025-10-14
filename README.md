@@ -436,59 +436,6 @@ openapi_spec = Steppe::OpenAPIVisitor.call(MyAPI)
 <img width="831" height="855" alt="CleanShot 2025-10-06 at 18 04 55" src="https://github.com/user-attachments/assets/fea61225-538b-4653-bdd0-9f8b21c8c389" />
 Using the [Swagger UI](https://swagger.io/tools/swagger-ui/) tool to view a Steppe API definition.
 
-### Mount in Rack-compliant routers
-
-#### Sinatra
-
-Mount Steppe services in a Sinatra app:
-
-```ruby
-require 'sinatra/base'
-
-class App < Sinatra::Base
-  MyService.endpoints.each do |endpoint|
-    public_send(endpoint.verb, endpoint.path.to_templates.first) do
-      resp = endpoint.run(request).response
-      resp.finish
-    end
-  end
-end
-```
-
-#### `Hanami::Router`
-
-The excellent and fast [Hanami::Router]() can be used as a standalone router for Steppe services. Or you can mount them into an existing Hanami app.
-
-```ruby
-# hanami_service.ru
-# run with
-#   bundle exec rackup ./hanami_service.ru
-require 'hanami/router'
-require 'rack/cors'
-
-app = MyService.route_with(Hanami::Router.new)
-
-# Or mount within a router block
-app = Hanami::Router.new do
-  scope '/api' do
-    MyService.route_with(self)
-  end
-end
-
-# Allowing all origins
-# to make Swagger UI work
-use Rack::Cors do
-  allow do
-    origins '*'
-    resource '*', headers: :any, methods: :any
-  end
-end
-
-run app
-```
-
-See `examples/hanami.ru`
-
 ### Custom Types
 
 Define custom validation types using [Plumb](https://github.com/ismasan/plumb):
@@ -868,6 +815,59 @@ end
 ```
 
 Security schemes can optionally implement [#query_schema](#query-schemas), [#payload_schemas](#payload-schemas) and [#header_schema](#header-schemas), which will be merged onto the endpoint's equivalents, and automatically added to OpenAPI documentation.
+
+## Mount in Rack-compliant routers
+
+### Sinatra
+
+Mount Steppe services in a Sinatra app:
+
+```ruby
+require 'sinatra/base'
+
+class App < Sinatra::Base
+  MyService.endpoints.each do |endpoint|
+    public_send(endpoint.verb, endpoint.path.to_templates.first) do
+      resp = endpoint.run(request).response
+      resp.finish
+    end
+  end
+end
+```
+
+### `Hanami::Router`
+
+The excellent and fast [Hanami::Router]() can be used as a standalone router for Steppe services. Or you can mount them into an existing Hanami app.
+
+```ruby
+# hanami_service.ru
+# run with
+#   bundle exec rackup ./hanami_service.ru
+require 'hanami/router'
+require 'rack/cors'
+
+app = MyService.route_with(Hanami::Router.new)
+
+# Or mount within a router block
+app = Hanami::Router.new do
+  scope '/api' do
+    MyService.route_with(self)
+  end
+end
+
+# Allowing all origins
+# to make Swagger UI work
+use Rack::Cors do
+  allow do
+    origins '*'
+    resource '*', headers: :any, methods: :any
+  end
+end
+
+run app
+```
+
+See `examples/hanami.ru`
 
 ## Installation
 
