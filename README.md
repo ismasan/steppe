@@ -369,13 +369,27 @@ Encapsulate logic in action classes:
 
 ```ruby
 class UpdateUser
+  # A Plumb::Types::Hash schema to validate
+  # input parameters for this class
+  # Here we define it once as a constant
+  # but it can be dynamic too
+  # @see https://ismasan.github.io/plumb/#typeshash
   SCHEMA = Types::Hash[
     name: Types::String.present,
     age: Types::Lax::Integer[18..]
   ]
 
+  # Expose the #payload_schema interface
+  # Steppe will merge this schema onto the 
+  # Endpoint's #payload_schema, which is automatically
+  # documented in OpenAPI format
+  # @return [Plumb::Types::Hash]
   def self.payload_schema = SCHEMA
 
+  # The Step interface that makes this class composable into
+  # a Steppe::Endpoint's pipeline.
+  # @param conn [Steppe::Result::Continue]
+  # @return [Steppe::Result::Continue, Steppe::Result::Halt]
   def self.call(conn)
     user = User.update(conn.params[:id], conn.params)
     conn.valid user
