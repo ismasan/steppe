@@ -293,7 +293,7 @@ RSpec.describe Steppe::Endpoint do
         # Add multiple
         e.payload_schema(
           address?: String,
-          file?: Steppe::Types::UploadedFile.with(type: 'text/plain')
+          file?: Steppe::Types::UploadedFile.where(type: 'text/plain')
         )
       end
     end

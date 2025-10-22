@@ -275,7 +275,7 @@ Handle file uploads with the `UploadedFile` type:
 ```ruby
 api.post :upload, '/files' do |e|
   e.payload_schema(
-    file: Steppe::Types::UploadedFile.with(type: 'text/plain')
+    file: Steppe::Types::UploadedFile.where(type: 'text/plain')
   )
 
   e.step do |conn|

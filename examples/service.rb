@@ -216,7 +216,7 @@ Service = Steppe::Service.new do |api|
   # with its own schema
   class ProcessFile
     def self.payload_schema = Plumb::Types::Hash[
-      file: Steppe::Types::UploadedFile.with(type: 'text/plain')
+      file: Steppe::Types::UploadedFile.where(type: 'text/plain')
     ]
 
     def self.call(conn)

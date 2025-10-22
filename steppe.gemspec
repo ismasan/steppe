@@ -35,7 +35,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'mustermann'
   spec.add_dependency 'papercraft'
   spec.add_dependency 'mustermann-contrib'
-  spec.add_dependency 'plumb', '>= 0.0.15'
+  spec.add_dependency 'plumb', '>= 0.0.16'
   spec.add_dependency 'rack', '>= 3.0'
 
   # For more information and examples about making a new gem, check out our
