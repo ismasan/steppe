@@ -600,7 +600,7 @@ class ListUsersAction
 end
 ```
 
-Note that this also applies to Security Schemes above. For example, the built-in `Steppe::Auth::Bearer` scheme defines a header schema to declare the `Authorization` header.
+Note that this also applies to Security Schemes below. For example, the built-in `Steppe::Auth::Bearer` scheme defines a header schema to declare the `Authorization` header.
 
 ### Security Schemes (authentication and authorization)
 
