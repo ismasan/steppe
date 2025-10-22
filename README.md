@@ -533,7 +533,7 @@ They also generate OpenAPI docs.
 
 #### Header schema order matters
 
-Like most things in Steppe, query schemas are registered as steps in a pipeline, so the order of registration matters.
+Like most things in Steppe, header schemas are registered as steps in a pipeline, so the order of registration matters.
 
 ```ruby
 # No header schema coercion yet, the header is a string here.
