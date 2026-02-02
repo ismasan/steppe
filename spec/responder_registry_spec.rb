@@ -40,8 +40,29 @@ RSpec.describe Steppe::ResponderRegistry do
     # Multiple matches, highest quality wins
     expect(registry.resolve(200, 'text/html; q=0.9, application/json; q=0.8')).to eq(html_responder)
 
+    # Unmatched Accept header falls back via */* wildcard responder
+    expect(registry.resolve(200, 'foo/bar')).to eq(fallback_responder)
+    expect(registry.resolve(422, 'foo/bar')).to eq(fallback_responder)
+
     # #each
     responders = registry.each.to_a
     expect(responders).to include(json_responder, json_error_responder, html_responder, application_responder, fallback_responder)
+  end
+
+  specify 'empty registry returns nil' do
+    registry = described_class.new
+    expect(registry.resolve(200, 'application/json')).to be_nil
+  end
+
+  specify 'falls back to first status-matching responder when Accept does not match' do
+    registry = described_class.new
+    json_responder = Steppe::Responder.new(statuses: 200, accepts: 'application/json')
+    registry << json_responder
+
+    # Accept header doesn't match, but status does -> fallback
+    expect(registry.resolve(200, 'text/html')).to eq(json_responder)
+
+    # Status doesn't match -> nil
+    expect(registry.resolve(404, 'text/html')).to be_nil
   end
 end

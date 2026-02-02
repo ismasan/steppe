@@ -43,7 +43,11 @@ module Steppe
     def resolve(response_status, accepted_content_types)
       content_types = ContentType.parse_accept(accepted_content_types)
       status_map = find_status_map(content_types)
-      status_map&.find(response_status.to_i)
+      responder = status_map&.find(response_status.to_i)
+      return responder if responder
+
+      # No match for Accept header, fall back to first responder matching the status
+      find { |r| r.statuses.cover?(response_status.to_i) }
     end
 
     private
