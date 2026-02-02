@@ -491,7 +491,7 @@ This is a responder that accepts HTML requests, and responds with JSON.
 ```ruby
 e.respond statuses: 200..299, accepts: :html, content_type: :json do |r|
   # Using an inline JSON serializer this time
-  e.serialize do
+  r.serialize do
     attribute :name, String
     attribute :age, Integer
   end
