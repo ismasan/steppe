@@ -151,4 +151,33 @@ RSpec.describe Steppe::Service do
       end
     end
   end
+
+  describe 'subclassing with custom endpoint class' do
+    let(:custom_endpoint_class) do
+      Class.new(Steppe::Endpoint) do
+        def custom_method
+          'custom'
+        end
+      end
+    end
+
+    let(:custom_service_class) do
+      endpoint_klass = custom_endpoint_class
+      Class.new(described_class) do
+        define_method(:endpoint_class) { endpoint_klass }
+        private :endpoint_class
+      end
+    end
+
+    it 'uses the custom endpoint class for all verbs' do
+      service = custom_service_class.new do |api|
+        api.get :users, '/users'
+        api.post :create_user, '/users'
+      end
+
+      expect(service[:users]).to be_a(custom_endpoint_class)
+      expect(service[:users].custom_method).to eq('custom')
+      expect(service[:create_user]).to be_a(custom_endpoint_class)
+    end
+  end
 end

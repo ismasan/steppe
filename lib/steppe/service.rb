@@ -224,9 +224,11 @@ module Steppe
 
     VERBS.each do |verb|
       define_method(verb) do |name, path, &block|
-        @lookup[name] = Endpoint.new(self, name, verb, path:, &block)
+        @lookup[name] = endpoint_class.new(self, name, verb, path:, &block)
         self
       end
     end
+
+    private def endpoint_class = Endpoint
   end
 end
