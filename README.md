@@ -785,6 +785,24 @@ api.bearer_auth 'BearerToken', store: DatabaseTokenStore.new
 
 The `conn` argument gives your access token access to the full request context, allowing for path-based, parameter-based, or other context-aware authorization decisions.
 
+#### Accessing the access token in downstream steps
+
+On successful authentication, the access token is stored in the request env and can be accessed in downstream steps:
+
+```ruby
+api.get :profile, '/profile' do |e|
+  e.security 'BearerToken', ['read:profile']
+
+  e.step do |conn|
+    access_token = conn.request.env[Steppe::Auth::Bearer::ACCESS_TOKEN_ENV_KEY]
+    user = User.find(access_token.user_id)
+    conn.valid(user)
+  end
+
+  e.json 200, UserSerializer
+end
+```
+
 #### Custom basic credential stores
 
 See the comments and interfaces in `lib/steppe/auth/basic.rb` to learn how to provide custom credential stores to the Basic auth scheme.

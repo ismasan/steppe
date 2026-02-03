@@ -8,11 +8,26 @@ module Steppe
     # The token store must implement `#get(token)` returning an access token object or nil.
     # The access token must implement `#allows?(conn, required_scopes)` returning a boolean.
     #
+    # On successful authentication, the access token is stored in the request env at
+    # `Steppe::Auth::Bearer::ACCESS_TOKEN_ENV_KEY` ('steppe.access_token'), making it
+    # available to downstream steps.
+    #
     # @example Using the built-in hash store
     #   api.bearer_auth 'my_auth', store: { 'token123' => ['read:users'] }
     #
+    # @example Accessing the token in downstream steps
+    #   e.security 'my_auth', ['read:users']
+    #
+    #   e.step do |conn|
+    #     access_token = conn.request.env[Steppe::Auth::Bearer::ACCESS_TOKEN_ENV_KEY]
+    #     # Use access_token.user_id, access_token.scopes, etc.
+    #     conn
+    #   end
+    #
     # @example Using a custom token store
     #   class MyAccessToken
+    #     attr_reader :user_id, :scopes
+    #
     #     def initialize(user_id, scopes)
     #       @user_id = user_id
     #       @scopes = scopes
@@ -31,9 +46,6 @@ module Steppe
     #   end
     #
     #   api.bearer_auth 'my_auth', store: MyTokenStore.new
-    #
-    #   # Then in an endpoint:
-    #   e.security 'my_auth', ['read:users']
     #
     class Bearer
       include Responses
@@ -122,8 +134,12 @@ module Steppe
         }
       end
 
+      # Request env key where the access token is stored after successful authentication.
+      ACCESS_TOKEN_ENV_KEY = 'steppe.access_token'
+
       # Handle authentication and authorization for a connection.
       # Validates the Bearer token from the Authorization header and checks if it has required scopes.
+      # On success, stores the access token in the request env at ACCESS_TOKEN_ENV_KEY.
       #
       # @param conn [Steppe::Result] The connection/result object
       # @param required_scopes [Array<String>] The scopes required for this endpoint
@@ -138,6 +154,7 @@ module Steppe
         access_token = @store.get(token)
         return forbidden(conn) unless access_token&.allows?(conn, required_scopes)
 
+        conn.request.env[ACCESS_TOKEN_ENV_KEY] = access_token
         conn
       end
     end

@@ -76,6 +76,18 @@ RSpec.describe Steppe::Auth::Bearer do
       expect(conn.response.status).to eq(200)
     end
 
+    it 'stores the access token in request env on success' do
+      conn = conn_with(
+        '/users',
+        headers: { 'HTTP_AUTHORIZATION' => 'Bearer admintoken' }
+      )
+
+      conn = scheme.handle(conn, %w[write])
+      access_token = conn.request.env[Steppe::Auth::Bearer::ACCESS_TOKEN_ENV_KEY]
+      expect(access_token).to be_a(Steppe::Auth::Bearer::HashTokenStore::AccessToken)
+      expect(access_token.scopes).to eq(%w[read write])
+    end
+
     context 'with custom token store' do
       let(:access_token_class) do
         Class.new do
