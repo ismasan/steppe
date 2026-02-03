@@ -16,7 +16,12 @@ module Steppe
     def self.from_request(service, request, path_prefix: nil)
       data = call(service)
       url = request.base_url.to_s
-      url = "#{url}/#{path_prefix}" if path_prefix
+
+      if path_prefix
+        url = "#{url}/#{path_prefix}"
+        data['paths'] = data['paths'].transform_keys { |path| "/#{path_prefix}#{path}" }
+      end
+
       return data if data['servers'].any? { |s| s['url'] == url }
 
       data['servers'] << { 'url' => url, 'description' => 'Current server' }

@@ -204,6 +204,17 @@ RSpec.describe Steppe::OpenAPIVisitor do
       data = described_class.from_request(service, request, path_prefix: 'api')
       expect(data['servers'].count { |s| s['url'] == 'https://foo.bar.com/api' }).to eq(1)
     end
+
+    it 'prefixes all paths with path_prefix' do
+      service = Steppe::Service.new do |s|
+        s.title = 'Test API'
+        s.get :users, '/users'
+        s.get :user, '/users/:id'
+      end
+
+      data = described_class.from_request(service, request, path_prefix: 'api')
+      expect(data['paths'].keys).to contain_exactly('/api/users', '/api/users/{id}')
+    end
   end
 
   def pluck(array, key)
