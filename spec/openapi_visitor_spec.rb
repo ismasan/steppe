@@ -205,7 +205,7 @@ RSpec.describe Steppe::OpenAPIVisitor do
       expect(data['servers'].count { |s| s['url'] == 'https://foo.bar.com/api' }).to eq(1)
     end
 
-    it 'prefixes all paths with path_prefix' do
+    it 'keeps paths relative to the server URL (no path prefix in paths)' do
       service = Steppe::Service.new do |s|
         s.title = 'Test API'
         s.get :users, '/users'
@@ -213,7 +213,9 @@ RSpec.describe Steppe::OpenAPIVisitor do
       end
 
       data = described_class.from_request(service, request, path_prefix: 'api')
-      expect(data['paths'].keys).to contain_exactly('/api/users', '/api/users/{id}')
+      # Paths remain relative - the server URL includes the prefix
+      expect(data['paths'].keys).to contain_exactly('/users', '/users/{id}')
+      expect(data['servers'].last['url']).to eq('https://foo.bar.com/api')
     end
   end
 

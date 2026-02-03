@@ -67,13 +67,81 @@ RSpec.describe Steppe::Auth::Bearer do
 
     it 'is successful when token with appropriate scopes given' do
       conn = conn_with(
-        '/users', 
+        '/users',
         headers: { 'HTTP_AUTHORIZATION' => 'Bearer admintoken' }
       )
 
       conn = scheme.handle(conn, %w[write])
       expect(conn.continue?).to be(true)
       expect(conn.response.status).to eq(200)
+    end
+
+    context 'with custom token store' do
+      let(:access_token_class) do
+        Class.new do
+          attr_reader :user_id
+
+          def initialize(user_id)
+            @user_id = user_id
+          end
+
+          def allows?(conn, required_scopes)
+            # Custom logic: check scopes and path
+            required_scopes.include?('admin') || conn.request.path.start_with?('/public')
+          end
+        end
+      end
+
+      let(:custom_store) do
+        token_class = access_token_class
+        Class.new do
+          define_method(:initialize) do |tokens|
+            @tokens = tokens.transform_values { |user_id| token_class.new(user_id) }
+          end
+
+          def get(token)
+            @tokens[token]
+          end
+        end.new({ 'usertoken' => 123 })
+      end
+
+      let(:scheme) do
+        described_class.new('Custom', store: custom_store)
+      end
+
+      it 'delegates authorization to the access token' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer usertoken' }
+        )
+
+        # Without admin scope and not on /public path, should be forbidden
+        conn = scheme.handle(conn, %w[read])
+        expect(conn.continue?).to be(false)
+        expect(conn.response.status).to eq(403)
+      end
+
+      it 'allows access when token allows? returns true' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer usertoken' }
+        )
+
+        # With admin scope, should be allowed
+        conn = scheme.handle(conn, %w[admin])
+        expect(conn.continue?).to be(true)
+      end
+
+      it 'passes conn to allows? for context-aware authorization' do
+        conn = conn_with(
+          '/public/resource',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer usertoken' }
+        )
+
+        # On /public path, should be allowed regardless of scopes
+        conn = scheme.handle(conn, %w[read])
+        expect(conn.continue?).to be(true)
+      end
     end
   end
 end
