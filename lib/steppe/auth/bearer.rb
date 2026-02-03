@@ -5,19 +5,34 @@ module Steppe
     # HTTP Bearer token authentication security scheme.
     # Validates Bearer tokens from the Authorization header and checks permissions against a token store.
     #
-    # @example
-    #   store = Steppe::Auth::HashTokenStore.new({
-    #     'token123' => ['read:users', 'write:users']
-    #   })
-    #   bearer = Steppe::Auth::Bearer.new('my_auth', store: store)
+    # The token store must implement `#get(token)` returning an access token object or nil.
+    # The access token must implement `#allows?(conn, required_scopes)` returning a boolean.
     #
-    #   # In a service definition:
-    #   api.security_scheme bearer
-    #
-    #   # Or use the shortcut
+    # @example Using the built-in hash store
     #   api.bearer_auth 'my_auth', store: { 'token123' => ['read:users'] }
     #
-    #   # Then in an endpoint in the service:
+    # @example Using a custom token store
+    #   class MyAccessToken
+    #     def initialize(user_id, scopes)
+    #       @user_id = user_id
+    #       @scopes = scopes
+    #     end
+    #
+    #     def allows?(conn, required_scopes)
+    #       (@scopes & required_scopes).any?
+    #     end
+    #   end
+    #
+    #   class MyTokenStore
+    #     def get(token)
+    #       record = Token.find_by(value: token)
+    #       MyAccessToken.new(record.user_id, record.scopes) if record
+    #     end
+    #   end
+    #
+    #   api.bearer_auth 'my_auth', store: MyTokenStore.new
+    #
+    #   # Then in an endpoint:
     #   e.security 'my_auth', ['read:users']
     #
     class Bearer
@@ -47,7 +62,7 @@ module Steppe
           #
           # @param required_scopes [Array<String>] Scopes to check against
           # @return [Boolean] True if token has at least one required scope
-          def allows?(required_scopes)
+          def allows?(_conn, required_scopes)
             (scopes & required_scopes).any?
           end
         end
@@ -121,7 +136,7 @@ module Steppe
         return unauthorized(conn) if token.nil?
 
         access_token = @store.get(token)
-        return forbidden(conn) unless access_token&.allows?(required_scopes)
+        return forbidden(conn) unless access_token&.allows?(conn, required_scopes)
 
         conn
       end

@@ -747,17 +747,47 @@ This is how that shows in the [SwaggerUI](https://swagger.io/tools/swagger-ui/) 
 
 <img width="922" height="812" alt="CleanShot 2025-10-11 at 23 46 02" src="https://github.com/user-attachments/assets/3bdecb81-8248-4437-a78a-c80dd7d44ebd" />
 
-#### Custom bearer token store or basic credential stores
+#### Custom bearer token store
 
-See the comments and interfaces in `lib/steppe/auth/*` to learn how to provide custom credential stores to the built-in security schemes. For example to store and fetch credentials from a database or file. 
-
-As an example:
+A custom token store must implement `#get(token)` which returns an access token object or `nil`. The access token object must implement `#allows?(conn, required_scopes)` to determine if the token grants access.
 
 ```ruby
-api.bearer_auth 'BearerToken', store: RedisTokenStore.new(REDIS)
+# Custom access token with context-aware authorization
+class MyAccessToken
+  attr_reader :user_id, :scopes
+
+  def initialize(user_id, scopes)
+    @user_id = user_id
+    @scopes = scopes
+  end
+
+  # @param conn [Steppe::Result] The current connection (access to request, params, etc.)
+  # @param required_scopes [Array<String>] Scopes required by the endpoint
+  # @return [Boolean] True if access is allowed
+  def allows?(conn, required_scopes)
+    # Example: check scopes, or use conn for context-aware decisions
+    (scopes & required_scopes).any? || conn.request.path.start_with?('/public')
+  end
+end
+
+# Custom token store
+class DatabaseTokenStore
+  def get(token)
+    record = AccessToken.find_by(token: token)
+    return nil unless record
+
+    MyAccessToken.new(record.user_id, record.scopes)
+  end
+end
+
+api.bearer_auth 'BearerToken', store: DatabaseTokenStore.new
 ```
 
-You can also implement stores to fetch tokens from a database, or to decode JWT tokens with a secret, etc.
+The `conn` argument gives your access token access to the full request context, allowing for path-based, parameter-based, or other context-aware authorization decisions.
+
+#### Custom basic credential stores
+
+See the comments and interfaces in `lib/steppe/auth/basic.rb` to learn how to provide custom credential stores to the Basic auth scheme.
 
 #### Custom security schemes
 
