@@ -168,10 +168,41 @@ RSpec.describe Steppe::OpenAPIVisitor do
       expect(id_param['schema']['type']).to eq('integer')
       expect(id_param['example']).to eq(1)
       expect(data.dig('components', 'securitySchemes', 'BearerAuth')).to eq(
-        'type' => 'http', 
+        'type' => 'http',
         'scheme' => 'bearer',
         'bearerFormat' => 'JWT'
       )
+    end
+  end
+
+  describe '.from_request' do
+    let(:service) do
+      Steppe::Service.new do |s|
+        s.title = 'Test API'
+        s.server(url: 'http://example.com', description: 'Production server')
+      end
+    end
+
+    let(:request) { Rack::Request.new(Rack::MockRequest.env_for('https://foo.bar.com/users')) }
+
+    it 'adds current server from request' do
+      data = described_class.from_request(service, request)
+      expect(data['servers'].last['url']).to eq('https://foo.bar.com')
+      expect(data['servers'].last['description']).to eq('Current server')
+    end
+
+    it 'appends path_prefix to current server URL' do
+      data = described_class.from_request(service, request, path_prefix: 'api')
+      expect(data['servers'].last['url']).to eq('https://foo.bar.com/api')
+    end
+
+    it 'does not add duplicate server if URL already exists' do
+      data = described_class.from_request(service, request, path_prefix: 'api')
+      expect(data['servers'].count { |s| s['url'] == 'https://foo.bar.com/api' }).to eq(1)
+
+      # Call again - should not add duplicate
+      data = described_class.from_request(service, request, path_prefix: 'api')
+      expect(data['servers'].count { |s| s['url'] == 'https://foo.bar.com/api' }).to eq(1)
     end
   end
 

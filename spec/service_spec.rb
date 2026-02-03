@@ -73,6 +73,23 @@ RSpec.describe Steppe::Service do
     expect(spec.keys).to match_array(%i[openapi info servers tags paths components])
   end
 
+  describe '#specs with path_prefix' do
+    subject(:service) do
+      described_class.new do |api|
+        api.title = 'Test API'
+        api.specs('/openapi.json', path_prefix: 'api/v1')
+      end
+    end
+
+    it 'includes path_prefix in the current server URL' do
+      env = Rack::MockRequest.env_for('https://example.com/openapi.json', 'HTTP_ACCEPT' => 'application/json')
+      request = Steppe::Request.new(env)
+      result = service[:__open_api].run(request)
+      spec = parse_body(result.response)
+      expect(spec[:servers].last[:url]).to eq('https://example.com/api/v1')
+    end
+  end
+
   context 'security schemes' do
     describe '#security_scheme' do
       it 'allows valid interface' do

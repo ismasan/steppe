@@ -178,24 +178,28 @@ module Steppe
     # A custom serializer that generates the OpenAPI specification in JSON format.
     class OpenAPISerializer
       # @param service [Steppe::Service] The service instance to generate the OpenAPI spec from.
-      def initialize(service)
+      # @param path_prefix [String, nil] Optional path prefix to append to the current server URL.
+      def initialize(service, path_prefix: nil)
         @service = service
+        @path_prefix = path_prefix
       end
 
       # @param conn [Steppe::Result]
       # @return [String] JSON data
       def render(conn)
-        spec = Steppe::OpenAPIVisitor.from_request(@service, conn.request)
+        spec = Steppe::OpenAPIVisitor.from_request(@service, conn.request, path_prefix: @path_prefix)
         JSON.dump(spec)
       end
     end
 
     # Generates an endpoint that serves the OpenAPI specification in JSON format.
     # @param path [String] The path where the OpenAPI spec will be available (default: '/')
-    def specs(path = '/')
+    # @param path_prefix [String, nil] Optional path prefix to append to the current server URL in the spec.
+    def specs(path = '/', path_prefix: nil)
+      serializer = OpenAPISerializer.new(self, path_prefix:)
       get :__open_api, path do |e|
         e.no_spec!
-        e.json 200..299, OpenAPISerializer.new(self)
+        e.json 200..299, serializer
       end
     end
 

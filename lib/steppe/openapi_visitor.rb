@@ -13,9 +13,10 @@ module Steppe
       ENVELOPE.merge(data)
     end
 
-    def self.from_request(service, request)
+    def self.from_request(service, request, path_prefix: nil)
       data = call(service)
       url = request.base_url.to_s
+      url = "#{url}/#{path_prefix}" if path_prefix
       return data if data['servers'].any? { |s| s['url'] == url }
 
       data['servers'] << { 'url' => url, 'description' => 'Current server' }
