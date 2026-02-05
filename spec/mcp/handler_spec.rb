@@ -65,33 +65,48 @@ RSpec.describe Steppe::MCP::Handler do
 
   subject(:handler) { described_class.new(service) }
 
-  def mcp_request(method, params = nil, id: 1)
+  def mcp_request(method, params = nil, id: 1, session_id: nil, headers: {})
     body = { jsonrpc: '2.0', id: id, method: method }
     body[:params] = params if params
+    env_headers = { 'CONTENT_TYPE' => 'application/json' }.merge(headers)
+    env_headers['HTTP_MCP_SESSION_ID'] = session_id if session_id
     Rack::MockRequest.env_for(
       '/mcp',
       method: 'POST',
       input: StringIO.new(JSON.dump(body)),
-      'CONTENT_TYPE' => 'application/json'
+      **env_headers
     )
   end
 
   def parse_response(response)
-    status, _headers, body = response
-    [status, JSON.parse(body.first, symbolize_names: true)]
+    status, headers, body = response
+    parsed_body = body.first&.empty? ? nil : JSON.parse(body.first, symbolize_names: true)
+    [status, headers, parsed_body]
+  end
+
+  def initialize_session(hdlr = handler)
+    env = mcp_request('initialize', {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'TestClient', version: '1.0.0' }
+    })
+    _status, headers, _body = parse_response(hdlr.call(env))
+    headers['Mcp-Session-Id']
   end
 
   describe 'initialize handshake' do
-    it 'responds to initialize request' do
+    it 'responds to initialize request with session ID' do
       env = mcp_request('initialize', {
         protocolVersion: '2025-06-18',
         capabilities: {},
         clientInfo: { name: 'TestClient', version: '1.0.0' }
       })
 
-      status, body = parse_response(handler.call(env))
+      status, headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
+      expect(headers['Mcp-Session-Id']).to be_a(String)
+      expect(headers['Mcp-Session-Id']).not_to be_empty
       expect(body[:jsonrpc]).to eq('2.0')
       expect(body[:id]).to eq(1)
       expect(body[:result][:protocolVersion]).to eq('2025-06-18')
@@ -101,7 +116,8 @@ RSpec.describe Steppe::MCP::Handler do
     end
 
     it 'responds to initialized notification with 202' do
-      env = mcp_request('notifications/initialized')
+      session_id = initialize_session
+      env = mcp_request('notifications/initialized', session_id: session_id)
 
       status, _headers, body = handler.call(env)
 
@@ -110,11 +126,132 @@ RSpec.describe Steppe::MCP::Handler do
     end
   end
 
-  describe 'tools/list' do
-    it 'returns all specced endpoints as tools' do
-      env = mcp_request('tools/list')
+  describe 'session management' do
+    context 'stateless mode (no session store)' do
+      it 'returns 404 for requests without session ID' do
+        env = mcp_request('tools/list')
 
-      status, body = parse_response(handler.call(env))
+        status, _headers, body = handler.call(env)
+
+        expect(status).to eq(404)
+        parsed = JSON.parse(body.first, symbolize_names: true)
+        expect(parsed[:error]).to eq('Session not found')
+      end
+
+      it 'accepts any session ID' do
+        env = mcp_request('tools/list', session_id: 'any-session-id')
+
+        status, _headers, _body = parse_response(handler.call(env))
+
+        expect(status).to eq(200)
+      end
+
+      it 'echoes session ID in response headers' do
+        env = mcp_request('tools/list', session_id: 'my-session-123')
+
+        _status, headers, _body = parse_response(handler.call(env))
+
+        expect(headers['Mcp-Session-Id']).to eq('my-session-123')
+      end
+
+      it 'allows DELETE with any session ID' do
+        env = Rack::MockRequest.env_for(
+          '/mcp',
+          method: 'DELETE',
+          'HTTP_MCP_SESSION_ID' => 'any-session-id'
+        )
+
+        status, _headers, _body = handler.call(env)
+        expect(status).to eq(204)
+      end
+
+      it 'returns 404 when DELETE has no session ID' do
+        env = Rack::MockRequest.env_for('/mcp', method: 'DELETE')
+
+        status, _headers, body = handler.call(env)
+        expect(status).to eq(404)
+      end
+    end
+
+    context 'with session store' do
+      let(:session_store) do
+        Class.new do
+          def initialize
+            @sessions = {}
+          end
+
+          def create
+            id = SecureRandom.uuid
+            @sessions[id] = true
+            id
+          end
+
+          def valid?(id)
+            @sessions.key?(id)
+          end
+
+          def delete(id)
+            @sessions.delete(id)
+          end
+        end.new
+      end
+
+      subject(:handler) { described_class.new(service, session_store: session_store) }
+
+      it 'validates session ID from store' do
+        env = mcp_request('tools/list', session_id: 'invalid-session')
+
+        status, _headers, body = handler.call(env)
+
+        expect(status).to eq(404)
+      end
+
+      it 'accepts valid session from store' do
+        session_id = initialize_session
+
+        env = mcp_request('tools/list', session_id: session_id)
+        status, _headers, _body = parse_response(handler.call(env))
+
+        expect(status).to eq(200)
+      end
+
+      it 'DELETE invalidates session' do
+        session_id = initialize_session
+        env = Rack::MockRequest.env_for(
+          '/mcp',
+          method: 'DELETE',
+          'HTTP_MCP_SESSION_ID' => session_id
+        )
+
+        status, _headers, _body = handler.call(env)
+        expect(status).to eq(204)
+
+        # Session should now be invalid
+        env = mcp_request('tools/list', session_id: session_id)
+        status, _headers, _body = handler.call(env)
+        expect(status).to eq(404)
+      end
+
+      it 'returns 404 when deleting invalid session' do
+        env = Rack::MockRequest.env_for(
+          '/mcp',
+          method: 'DELETE',
+          'HTTP_MCP_SESSION_ID' => 'non-existent'
+        )
+
+        status, _headers, _body = handler.call(env)
+        expect(status).to eq(404)
+      end
+    end
+  end
+
+  describe 'tools/list' do
+    let(:session_id) { initialize_session }
+
+    it 'returns all specced endpoints as tools' do
+      env = mcp_request('tools/list', session_id: session_id)
+
+      status, _headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
       expect(body[:result][:tools]).to be_an(Array)
@@ -125,18 +262,18 @@ RSpec.describe Steppe::MCP::Handler do
     end
 
     it 'includes tool descriptions' do
-      env = mcp_request('tools/list')
+      env = mcp_request('tools/list', session_id: session_id)
 
-      _status, body = parse_response(handler.call(env))
+      _status, _headers, body = parse_response(handler.call(env))
 
       list_users = body[:result][:tools].find { |t| t[:name] == 'list_users' }
       expect(list_users[:description]).to eq('List all users')
     end
 
     it 'includes input schemas' do
-      env = mcp_request('tools/list')
+      env = mcp_request('tools/list', session_id: session_id)
 
-      _status, body = parse_response(handler.call(env))
+      _status, _headers, body = parse_response(handler.call(env))
 
       list_users = body[:result][:tools].find { |t| t[:name] == 'list_users' }
       expect(list_users[:inputSchema]).to be_a(Hash)
@@ -145,13 +282,15 @@ RSpec.describe Steppe::MCP::Handler do
   end
 
   describe 'tools/call' do
+    let(:session_id) { initialize_session }
+
     it 'executes a GET endpoint with query params' do
       env = mcp_request('tools/call', {
         name: 'list_users',
         arguments: { q: 'alice', limit: 5 }
-      })
+      }, session_id: session_id)
 
-      status, body = parse_response(handler.call(env))
+      status, _headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
       expect(body[:result][:isError]).to eq(false)
@@ -166,9 +305,9 @@ RSpec.describe Steppe::MCP::Handler do
       env = mcp_request('tools/call', {
         name: 'get_user',
         arguments: { id: 42 }
-      })
+      }, session_id: session_id)
 
-      status, body = parse_response(handler.call(env))
+      status, _headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
       expect(body[:result][:isError]).to eq(false)
@@ -181,9 +320,9 @@ RSpec.describe Steppe::MCP::Handler do
       env = mcp_request('tools/call', {
         name: 'create_user',
         arguments: { name: 'Charlie', email: 'charlie@example.com' }
-      })
+      }, session_id: session_id)
 
-      status, body = parse_response(handler.call(env))
+      status, _headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
       expect(body[:result][:isError]).to eq(false)
@@ -197,9 +336,9 @@ RSpec.describe Steppe::MCP::Handler do
       env = mcp_request('tools/call', {
         name: 'unknown_tool',
         arguments: {}
-      })
+      }, session_id: session_id)
 
-      status, body = parse_response(handler.call(env))
+      status, _headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
       expect(body[:error]).to be_a(Hash)
@@ -209,10 +348,12 @@ RSpec.describe Steppe::MCP::Handler do
   end
 
   describe 'error handling' do
-    it 'returns error for unknown method' do
-      env = mcp_request('unknown/method')
+    let(:session_id) { initialize_session }
 
-      status, body = parse_response(handler.call(env))
+    it 'returns error for unknown method' do
+      env = mcp_request('unknown/method', session_id: session_id)
+
+      status, _headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
       expect(body[:error]).to be_a(Hash)
@@ -256,41 +397,29 @@ RSpec.describe Steppe::MCP::Handler do
 
     subject(:handler) { described_class.new(service_with_auth) }
 
+    let(:session_id) { initialize_session(handler) }
+
     it 'passes Authorization header to endpoint' do
-      env = Rack::MockRequest.env_for(
-        '/mcp',
-        method: 'POST',
-        input: StringIO.new(JSON.dump({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/call',
-          params: { name: 'protected', arguments: {} }
-        })),
-        'CONTENT_TYPE' => 'application/json',
-        'HTTP_AUTHORIZATION' => 'Bearer validtoken'
+      env = mcp_request('tools/call',
+        { name: 'protected', arguments: {} },
+        session_id: session_id,
+        headers: { 'HTTP_AUTHORIZATION' => 'Bearer validtoken' }
       )
 
-      status, body = parse_response(handler.call(env))
+      status, _headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
       expect(body[:result][:isError]).to eq(false)
     end
 
     it 'returns error when auth fails' do
-      env = Rack::MockRequest.env_for(
-        '/mcp',
-        method: 'POST',
-        input: StringIO.new(JSON.dump({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/call',
-          params: { name: 'protected', arguments: {} }
-        })),
-        'CONTENT_TYPE' => 'application/json'
+      env = mcp_request('tools/call',
+        { name: 'protected', arguments: {} },
+        session_id: session_id
         # No Authorization header
       )
 
-      status, body = parse_response(handler.call(env))
+      status, _headers, body = parse_response(handler.call(env))
 
       expect(status).to eq(200)
       expect(body[:result][:isError]).to eq(true)

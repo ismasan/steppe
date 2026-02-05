@@ -34,10 +34,29 @@ module Steppe
     class Handler
       PROTOCOL_VERSION = '2025-06-18'
       JSON_TYPE = 'application/json'
+      SESSION_HEADER = 'Mcp-Session-Id'
+      SESSION_HEADER_ENV = 'HTTP_MCP_SESSION_ID'
+
+      # Interface for session stores
+      # Must implement:
+      #   #create -> String (new session ID)
+      #   #valid?(session_id) -> Boolean
+      #   #delete(session_id) -> void
+      SessionStoreInterface = Types::Interface[:create, :valid?, :delete]
+
+      # Null session store - stateless, accepts any session ID
+      class NullSessionStore
+        def create = SecureRandom.uuid
+        def valid?(_session_id) = true
+        def delete(_session_id) = nil
+      end
 
       # @param service [Steppe::Service] The service to expose as MCP tools
-      def initialize(service)
+      # @param session_store [SessionStoreInterface] Session store (defaults to stateless NullSessionStore)
+      def initialize(service, session_store: NullSessionStore.new)
         @service = service
+        session_store => SessionStoreInterface
+        @session_store = session_store
         @tools = service.endpoints.filter_map do |endpoint|
           next unless endpoint.specced?
 
@@ -56,15 +75,31 @@ module Steppe
         request = Rack::Request.new(env)
         @current_env = env
 
+        # Handle DELETE for session termination
+        if request.delete?
+          return handle_session_delete(request)
+        end
+
         body = parse_request_body(request)
         return error_response(400, 'Invalid JSON') unless body
 
-        result = dispatch(body)
+        # Session validation (skip for initialize)
+        is_initialize = body[:method] == 'initialize'
+        session_id = request.get_header(SESSION_HEADER_ENV)
+
+        unless is_initialize
+          return error_response(404, 'Session not found') unless valid_session?(session_id)
+        end
+
+        result, headers = dispatch(body)
+
+        # Echo session ID in response (if present, or newly created for initialize)
+        headers[SESSION_HEADER] ||= session_id if session_id
 
         if result == :accepted
-          [202, {}, []]
+          [202, headers, []]
         else
-          [200, { 'Content-Type' => JSON_TYPE }, [JSON.dump(result)]]
+          [200, { 'Content-Type' => JSON_TYPE }.merge(headers), [JSON.dump(result)]]
         end
       rescue StandardError => e
         error_response(500, e.message)
@@ -82,10 +117,27 @@ module Steppe
         [status, { 'Content-Type' => JSON_TYPE }, [JSON.dump({ error: message })]]
       end
 
+      # Session management - delegates to @session_store
+      def create_session
+        @session_store.create
+      end
+
+      def valid_session?(session_id)
+        session_id && @session_store.valid?(session_id)
+      end
+
+      def handle_session_delete(request)
+        session_id = request.get_header(SESSION_HEADER_ENV)
+        return error_response(404, 'Session not found') unless valid_session?(session_id)
+
+        @session_store.delete(session_id)
+        [204, {}, []]
+      end
+
       def dispatch(msg)
-        case msg[:method]
+        result = case msg[:method]
         when 'initialize'
-          handle_initialize(msg)
+          return handle_initialize(msg)
         when 'notifications/initialized'
           :accepted
         when 'tools/list'
@@ -95,12 +147,17 @@ module Steppe
         else
           jsonrpc_error(msg[:id], -32601, "Method not found: #{msg[:method]}")
         end
+
+        [result, {}]
       end
 
       # Handle MCP initialize request
+      # Creates a new session and returns session ID in headers
       # @see https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle
       def handle_initialize(msg)
-        jsonrpc_result(msg[:id], {
+        session_id = create_session
+
+        result = jsonrpc_result(msg[:id], {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: { tools: {} },
           serverInfo: {
@@ -108,6 +165,8 @@ module Steppe
             version: @service.version
           }
         })
+
+        [result, { SESSION_HEADER => session_id }]
       end
 
       # Handle MCP tools/list request
