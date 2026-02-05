@@ -3,6 +3,7 @@
 require 'json'
 require 'rack'
 require 'securerandom'
+require_relative 'prompt'
 
 module Steppe
   module MCP
@@ -25,9 +26,15 @@ module Steppe
     #   # Mount as Rack app
     #   run Steppe::MCP::Handler.new(service)
     #
-    # @example With Sinatra/Rails
-    #   map '/mcp' do
-    #     run Steppe::MCP::Handler.new(MyService)
+    # @example With prompts
+    #   Steppe::MCP::Handler.new(service) do |mcp|
+    #     mcp.prompt 'create_user_guide' do |p|
+    #       p.description = 'Guide for creating a new user'
+    #       p.argument :name, required: true, description: 'User name'
+    #       p.messages do |args|
+    #         [{ role: 'user', content: { type: 'text', text: "Create a user named #{args[:name]}" } }]
+    #       end
+    #     end
     #   end
     #
     # @see https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
@@ -53,10 +60,12 @@ module Steppe
 
       # @param service [Steppe::Service] The service to expose as MCP tools
       # @param session_store [SessionStoreInterface] Session store (defaults to stateless NullSessionStore)
-      def initialize(service, session_store: NullSessionStore.new)
+      # @yield [handler] Block for configuring prompts
+      def initialize(service, session_store: NullSessionStore.new, &block)
         @service = service
         session_store => SessionStoreInterface
         @session_store = session_store
+        @prompts = {}
         @tools = service.endpoints.filter_map do |endpoint|
           next unless endpoint.specced?
 
@@ -66,6 +75,16 @@ module Steppe
             inputSchema: build_input_schema(endpoint)
           }
         end
+
+        block&.call(self)
+      end
+
+      # Define a prompt template
+      # @param name [String, Symbol] Unique identifier for the prompt
+      # @yield [prompt] Block for configuring the prompt
+      def prompt(name, &block)
+        p = Prompt.new(name, &block)
+        @prompts[p.name] = p
       end
 
       # Rack interface
@@ -144,6 +163,10 @@ module Steppe
           handle_tools_list(msg)
         when 'tools/call'
           handle_tools_call(msg)
+        when 'prompts/list'
+          handle_prompts_list(msg)
+        when 'prompts/get'
+          handle_prompts_get(msg)
         else
           jsonrpc_error(msg[:id], -32601, "Method not found: #{msg[:method]}")
         end
@@ -157,9 +180,12 @@ module Steppe
       def handle_initialize(msg)
         session_id = create_session
 
+        capabilities = { tools: {} }
+        capabilities[:prompts] = {} if @prompts.any?
+
         result = jsonrpc_result(msg[:id], {
           protocolVersion: PROTOCOL_VERSION,
-          capabilities: { tools: {} },
+          capabilities: capabilities,
           serverInfo: {
             name: @service.title,
             version: @service.version
@@ -186,6 +212,25 @@ module Steppe
 
         result = call_endpoint(endpoint, arguments)
         build_tool_response(msg[:id], result)
+      end
+
+      # Handle MCP prompts/list request
+      # Returns all defined prompts
+      def handle_prompts_list(msg)
+        prompts = @prompts.values.map(&:to_definition)
+        jsonrpc_result(msg[:id], { prompts: prompts })
+      end
+
+      # Handle MCP prompts/get request
+      # Returns the prompt with generated messages
+      def handle_prompts_get(msg)
+        name = msg.dig(:params, :name)
+        arguments = msg.dig(:params, :arguments) || {}
+
+        prompt = @prompts[name]
+        return jsonrpc_error(msg[:id], -32602, "Unknown prompt: #{name}") unless prompt
+
+        jsonrpc_result(msg[:id], prompt.to_result(arguments))
       end
 
       # Execute a Steppe endpoint with the given arguments

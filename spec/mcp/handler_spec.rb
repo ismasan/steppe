@@ -425,4 +425,158 @@ RSpec.describe Steppe::MCP::Handler do
       expect(body[:result][:isError]).to eq(true)
     end
   end
+
+  describe 'prompts' do
+    subject(:handler) do
+      described_class.new(service) do |mcp|
+        mcp.prompt 'greet_user' do |p|
+          p.description = 'Greet a user by name'
+          p.argument :name, required: true, description: 'User name'
+          p.messages do |args|
+            [{ role: 'user', content: { type: 'text', text: "Say hello to #{args[:name]}" } }]
+          end
+        end
+
+        mcp.prompt 'code_review' do |p|
+          p.description = 'Review code quality'
+          p.argument :code, required: true
+          p.argument :language, required: false, description: 'Programming language'
+          p.messages do |args|
+            lang = args[:language] ? " (#{args[:language]})" : ''
+            [
+              { role: 'user', content: { type: 'text', text: "Review this code#{lang}:\n#{args[:code]}" } },
+              { role: 'assistant', content: { type: 'text', text: "I'll analyze this code for quality issues..." } }
+            ]
+          end
+        end
+      end
+    end
+
+    let(:session_id) { initialize_session(handler) }
+
+    describe 'initialize with prompts' do
+      it 'includes prompts capability' do
+        env = mcp_request('initialize', {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'TestClient', version: '1.0.0' }
+        })
+
+        _status, _headers, body = parse_response(handler.call(env))
+
+        expect(body[:result][:capabilities]).to eq({ tools: {}, prompts: {} })
+      end
+    end
+
+    describe 'prompts/list' do
+      it 'returns all defined prompts' do
+        env = mcp_request('prompts/list', session_id: session_id)
+
+        status, _headers, body = parse_response(handler.call(env))
+
+        expect(status).to eq(200)
+        expect(body[:result][:prompts]).to be_an(Array)
+        expect(body[:result][:prompts].length).to eq(2)
+
+        prompt_names = body[:result][:prompts].map { |p| p[:name] }
+        expect(prompt_names).to contain_exactly('greet_user', 'code_review')
+      end
+
+      it 'includes prompt descriptions' do
+        env = mcp_request('prompts/list', session_id: session_id)
+
+        _status, _headers, body = parse_response(handler.call(env))
+
+        greet = body[:result][:prompts].find { |p| p[:name] == 'greet_user' }
+        expect(greet[:description]).to eq('Greet a user by name')
+      end
+
+      it 'includes prompt arguments' do
+        env = mcp_request('prompts/list', session_id: session_id)
+
+        _status, _headers, body = parse_response(handler.call(env))
+
+        greet = body[:result][:prompts].find { |p| p[:name] == 'greet_user' }
+        expect(greet[:arguments]).to eq([
+          { name: 'name', required: true, description: 'User name' }
+        ])
+
+        review = body[:result][:prompts].find { |p| p[:name] == 'code_review' }
+        expect(review[:arguments]).to contain_exactly(
+          { name: 'code', required: true },
+          { name: 'language', required: false, description: 'Programming language' }
+        )
+      end
+    end
+
+    describe 'prompts/get' do
+      it 'returns prompt with generated messages' do
+        env = mcp_request('prompts/get', {
+          name: 'greet_user',
+          arguments: { name: 'Alice' }
+        }, session_id: session_id)
+
+        status, _headers, body = parse_response(handler.call(env))
+
+        expect(status).to eq(200)
+        expect(body[:result][:description]).to eq('Greet a user by name')
+        expect(body[:result][:messages]).to eq([
+          { role: 'user', content: { type: 'text', text: 'Say hello to Alice' } }
+        ])
+      end
+
+      it 'returns prompt with multiple messages' do
+        env = mcp_request('prompts/get', {
+          name: 'code_review',
+          arguments: { code: 'def foo; end', language: 'ruby' }
+        }, session_id: session_id)
+
+        status, _headers, body = parse_response(handler.call(env))
+
+        expect(status).to eq(200)
+        expect(body[:result][:messages].length).to eq(2)
+        expect(body[:result][:messages].first[:content][:text]).to include('ruby')
+        expect(body[:result][:messages].first[:content][:text]).to include('def foo; end')
+      end
+
+      it 'returns error for unknown prompt' do
+        env = mcp_request('prompts/get', {
+          name: 'unknown_prompt',
+          arguments: {}
+        }, session_id: session_id)
+
+        status, _headers, body = parse_response(handler.call(env))
+
+        expect(status).to eq(200)
+        expect(body[:error]).to be_a(Hash)
+        expect(body[:error][:code]).to eq(-32602)
+        expect(body[:error][:message]).to include('Unknown prompt')
+      end
+    end
+
+    context 'handler without prompts' do
+      subject(:handler) { described_class.new(service) }
+
+      it 'does not include prompts capability' do
+        env = mcp_request('initialize', {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'TestClient', version: '1.0.0' }
+        })
+
+        _status, _headers, body = parse_response(handler.call(env))
+
+        expect(body[:result][:capabilities]).to eq({ tools: {} })
+      end
+
+      it 'returns empty prompts list' do
+        session_id = initialize_session(handler)
+        env = mcp_request('prompts/list', session_id: session_id)
+
+        _status, _headers, body = parse_response(handler.call(env))
+
+        expect(body[:result][:prompts]).to eq([])
+      end
+    end
+  end
 end
