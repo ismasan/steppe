@@ -38,10 +38,15 @@ module Steppe
       # @param service [Steppe::Service] The service to expose as MCP tools
       def initialize(service)
         @service = service
-        @endpoints_by_name = service.endpoints.each_with_object({}) do |ep, h|
-          h[ep.rel_name.to_s] = ep
+        @tools = service.endpoints.filter_map do |endpoint|
+          next unless endpoint.specced?
+
+          {
+            name: endpoint.rel_name.to_s,
+            description: endpoint.description,
+            inputSchema: build_input_schema(endpoint)
+          }
         end
-        @schema_visitor = Steppe::OpenAPIVisitor.new
       end
 
       # Rack interface
@@ -49,7 +54,7 @@ module Steppe
       # @return [Array] Rack response tuple [status, headers, body]
       def call(env)
         request = Rack::Request.new(env)
-        @current_auth_header = request.get_header('HTTP_AUTHORIZATION')
+        @current_env = env
 
         body = parse_request_body(request)
         return error_response(400, 'Invalid JSON') unless body
@@ -108,17 +113,7 @@ module Steppe
       # Handle MCP tools/list request
       # Returns all specced endpoints as MCP tool definitions
       def handle_tools_list(msg)
-        tools = @service.endpoints.filter_map do |endpoint|
-          next unless endpoint.specced?
-
-          {
-            name: endpoint.rel_name.to_s,
-            description: endpoint.description,
-            inputSchema: build_input_schema(endpoint)
-          }
-        end
-
-        jsonrpc_result(msg[:id], { tools: tools })
+        jsonrpc_result(msg[:id], { tools: @tools })
       end
 
       # Handle MCP tools/call request
@@ -127,7 +122,7 @@ module Steppe
         name = msg.dig(:params, :name)
         arguments = msg.dig(:params, :arguments) || {}
 
-        endpoint = @endpoints_by_name[name]
+        endpoint = @service[name&.to_sym]
         return jsonrpc_error(msg[:id], -32602, "Unknown tool: #{name}") unless endpoint
 
         result = call_endpoint(endpoint, arguments)
@@ -163,6 +158,11 @@ module Steppe
       end
 
       # Build a Rack environment for the endpoint call
+      # Forwards HTTP headers from the original MCP request
+      # NOTE: we only dump to JSON so that the endpoint can deserialize it again
+      # because Steppe will add a body parsers if the request is application/json
+      # We could provide our own internal content type (ex. application/steppe-mcp)
+      # to skip the endpoint's JSON parser and just pass the params Hash
       def build_rack_env(endpoint, path, params)
         env = Rack::MockRequest.env_for(
           path,
@@ -170,9 +170,14 @@ module Steppe
           input: StringIO.new(JSON.dump(params))
         )
 
+        # Forward HTTP_* headers from the original request
+        @current_env.each do |key, value|
+          env[key] = value if key.start_with?('HTTP_')
+        end
+
+        # Override content type and accept for JSON
         env['CONTENT_TYPE'] = JSON_TYPE
         env['HTTP_ACCEPT'] = JSON_TYPE
-        env['HTTP_AUTHORIZATION'] = @current_auth_header if @current_auth_header
 
         # For GET requests, also set query string
         if endpoint.verb == :get && params.any?
@@ -214,7 +219,7 @@ module Steppe
           merged = merged + schema if schema.respond_to?(:+)
         end
 
-        @schema_visitor.visit(merged)
+        merged.to_json_schema
       end
 
       # JSON-RPC 2.0 success response
