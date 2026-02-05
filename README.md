@@ -864,6 +864,64 @@ end
 
 Security schemes can optionally implement [#query_schema](#query-schemas), [#payload_schemas](#payload-schemas) and [#header_schema](#header-schemas), which will be merged onto the endpoint's equivalents, and automatically added to OpenAPI documentation.
 
+```
+```
+## Mount in Rack-compliant routers
+
+`Steppe::Enpoint` instances include a `#to_rack` method that turns them into Rack apps, and they have attributes like `#path` and `#verb` which allows you to mount them onto any Rack-compliant routing library.
+
+### Sinatra
+
+Mount Steppe services in a Sinatra app:
+
+```ruby
+require 'sinatra/base'
+
+class App < Sinatra::Base
+  MyService.endpoints.each do |endpoint|
+    public_send(endpoint.verb, endpoint.path.to_templates.first) do
+      resp = endpoint.run(request).response
+      resp.finish
+    end
+  end
+end
+```
+
+### `Hanami::Router`
+
+The excellent and fast [Hanami::Router]() can be used as a standalone router for Steppe services. Or you can mount them into an existing Hanami app.
+Use the `Steppe::Service#route_with` helper to mount all endpoints in a service at once.
+
+```ruby
+# hanami_service.ru
+# run with
+#   bundle exec rackup ./hanami_service.ru
+require 'hanami/router'
+require 'rack/cors'
+
+app = MyService.route_with(Hanami::Router.new)
+
+# Or mount within a router block
+app = Hanami::Router.new do
+  scope '/api' do
+    MyService.route_with(self)
+  end
+end
+
+# Allowing all origins
+# to make Swagger UI work
+use Rack::Cors do
+  allow do
+    origins '*'
+    resource '*', headers: :any, methods: :any
+  end
+end
+
+run app
+```
+
+See `examples/hanami.ru`
+
 ## MCP (Model Context Protocol) Server
 
 Steppe services can be exposed as [MCP](https://modelcontextprotocol.io/) servers, allowing AI assistants like Claude to discover and call your API endpoints as tools.
@@ -871,6 +929,7 @@ Steppe services can be exposed as [MCP](https://modelcontextprotocol.io/) server
 ### Basic Usage
 
 ```ruby
+# config.ru
 require 'steppe/mcp/handler'
 
 # Create an MCP handler from your service
@@ -880,7 +939,7 @@ mcp = Steppe::MCP::Handler.new(MyService)
 run mcp
 ```
 
-### Mounting in config.ru
+### Mounting with Rack::Builder
 
 Use `Rack::Builder` to mount the MCP handler alongside your REST API:
 
@@ -1049,61 +1108,11 @@ end
 run app
 ```
 
-## Mount in Rack-compliant routers
+Once live (or in localhost), you can add your MCP to Claude and other LLMs.
 
-`Steppe::Enpoint` instances include a `#to_rack` method that turns them into Rack apps, and they have attributes like `#path` and `#verb` which allows you to mount them onto any Rack-compliant routing library.
-
-### Sinatra
-
-Mount Steppe services in a Sinatra app:
-
-```ruby
-require 'sinatra/base'
-
-class App < Sinatra::Base
-  MyService.endpoints.each do |endpoint|
-    public_send(endpoint.verb, endpoint.path.to_templates.first) do
-      resp = endpoint.run(request).response
-      resp.finish
-    end
-  end
-end
 ```
-
-### `Hanami::Router`
-
-The excellent and fast [Hanami::Router]() can be used as a standalone router for Steppe services. Or you can mount them into an existing Hanami app.
-Use the `Steppe::Service#route_with` helper to mount all endpoints in a service at once.
-
-```ruby
-# hanami_service.ru
-# run with
-#   bundle exec rackup ./hanami_service.ru
-require 'hanami/router'
-require 'rack/cors'
-
-app = MyService.route_with(Hanami::Router.new)
-
-# Or mount within a router block
-app = Hanami::Router.new do
-  scope '/api' do
-    MyService.route_with(self)
-  end
-end
-
-# Allowing all origins
-# to make Swagger UI work
-use Rack::Cors do
-  allow do
-    origins '*'
-    resource '*', headers: :any, methods: :any
-  end
-end
-
-run app
+claude mcp add --transport http my-mcp https://api.myserver.com/mcp --header "Authorization: Bearer XXX
 ```
-
-See `examples/hanami.ru`
 
 ## Installation
 
