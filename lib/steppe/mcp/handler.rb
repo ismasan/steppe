@@ -3,7 +3,7 @@
 require 'json'
 require 'rack'
 require 'securerandom'
-require_relative 'prompt'
+require 'steppe/mcp/prompt'
 
 module Steppe
   module MCP
