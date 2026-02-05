@@ -65,6 +65,31 @@ RSpec.describe Steppe::MCP::Handler do
 
   subject(:handler) { described_class.new(service) }
 
+  describe 'configuration freezing' do
+    it 'freezes instructions after initialization' do
+      handler = described_class.new(service) do |mcp|
+        mcp.instructions = 'Test instructions'
+      end
+
+      expect { handler.instructions = 'New instructions' }.to raise_error(FrozenError)
+    end
+
+    it 'freezes prompts after initialization' do
+      handler = described_class.new(service)
+
+      expect { handler.prompt('test') { |p| p.description = 'Test' } }.to raise_error(FrozenError)
+    end
+
+    it 'allows configuration within the block' do
+      handler = described_class.new(service) do |mcp|
+        mcp.instructions = 'Instructions'
+        mcp.prompt('test') { |p| p.description = 'Test prompt' }
+      end
+
+      expect(handler.instructions).to eq('Instructions')
+    end
+  end
+
   def mcp_request(method, params = nil, id: 1, session_id: nil, headers: {})
     body = { jsonrpc: '2.0', id: id, method: method }
     body[:params] = params if params
@@ -123,6 +148,40 @@ RSpec.describe Steppe::MCP::Handler do
 
       expect(status).to eq(202)
       expect(body).to eq([])
+    end
+
+    it 'does not include instructions when not set' do
+      env = mcp_request('initialize', {
+        protocolVersion: '2025-06-18',
+        capabilities: {},
+        clientInfo: { name: 'TestClient', version: '1.0.0' }
+      })
+
+      _status, _headers, body = parse_response(handler.call(env))
+
+      expect(body[:result]).not_to have_key(:instructions)
+    end
+
+    context 'with instructions configured' do
+      subject(:handler) do
+        described_class.new(service) do |mcp|
+          mcp.instructions = 'Use the list_users tool to fetch users. Always filter by name when searching.'
+        end
+      end
+
+      it 'includes instructions in initialize response' do
+        env = mcp_request('initialize', {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 'TestClient', version: '1.0.0' }
+        })
+
+        _status, _headers, body = parse_response(handler.call(env))
+
+        expect(body[:result][:instructions]).to eq(
+          'Use the list_users tool to fetch users. Always filter by name when searching.'
+        )
+      end
     end
   end
 

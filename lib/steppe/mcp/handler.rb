@@ -58,14 +58,27 @@ module Steppe
         def delete(_session_id) = nil
       end
 
+      # Instructions to include in the initialize response
+      # @return [String, nil]
+      attr_reader :instructions
+
+      # Set instructions (only allowed during configuration block)
+      # @param value [String, nil]
+      def instructions=(value)
+        raise FrozenError, "can't modify frozen #{self.class}" if @frozen
+        @instructions = value
+      end
+
       # @param service [Steppe::Service] The service to expose as MCP tools
       # @param session_store [SessionStoreInterface] Session store (defaults to stateless NullSessionStore)
-      # @yield [handler] Block for configuring prompts
+      # @yield [handler] Block for configuring prompts and instructions
       def initialize(service, session_store: NullSessionStore.new, &block)
+        @frozen = false
         @service = service
         session_store => SessionStoreInterface
         @session_store = session_store
         @prompts = {}
+        @instructions = nil
         @tools = service.endpoints.filter_map do |endpoint|
           next unless endpoint.specced?
 
@@ -73,16 +86,19 @@ module Steppe
             name: endpoint.rel_name.to_s,
             description: endpoint.description,
             inputSchema: build_input_schema(endpoint)
-          }
+          }.freeze
         end
 
         block&.call(self)
+        freeze_configuration!
       end
 
-      # Define a prompt template
+      # Define a prompt template (only allowed during configuration block)
       # @param name [String, Symbol] Unique identifier for the prompt
       # @yield [prompt] Block for configuring the prompt
       def prompt(name, &block)
+        raise FrozenError, "can't modify frozen #{self.class}" if @frozen
+
         p = Prompt.new(name, &block)
         @prompts[p.name] = p
       end
@@ -125,6 +141,13 @@ module Steppe
       end
 
       private
+
+      def freeze_configuration!
+        @instructions = @instructions.freeze
+        @prompts.freeze
+        @tools.freeze
+        @frozen = true
+      end
 
       def parse_request_body(request)
         JSON.parse(request.body.read, symbolize_names: true)
@@ -183,14 +206,17 @@ module Steppe
         capabilities = { tools: {} }
         capabilities[:prompts] = {} if @prompts.any?
 
-        result = jsonrpc_result(msg[:id], {
+        init_result = {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: capabilities,
           serverInfo: {
             name: @service.title,
             version: @service.version
           }
-        })
+        }
+        init_result[:instructions] = @instructions if @instructions
+
+        result = jsonrpc_result(msg[:id], init_result)
 
         [result, { SESSION_HEADER => session_id }]
       end
