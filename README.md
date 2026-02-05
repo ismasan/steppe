@@ -864,6 +864,162 @@ end
 
 Security schemes can optionally implement [#query_schema](#query-schemas), [#payload_schemas](#payload-schemas) and [#header_schema](#header-schemas), which will be merged onto the endpoint's equivalents, and automatically added to OpenAPI documentation.
 
+## MCP (Model Context Protocol) Server
+
+Steppe services can be exposed as [MCP](https://modelcontextprotocol.io/) servers, allowing AI assistants like Claude to discover and call your API endpoints as tools.
+
+### Basic Usage
+
+```ruby
+require 'steppe/mcp/handler'
+
+# Create an MCP handler from your service
+mcp = Steppe::MCP::Handler.new(MyService)
+
+# Mount as a Rack app (e.g., at /mcp)
+run mcp
+```
+
+The handler implements the [MCP Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports), exposing your Steppe endpoints as MCP tools. Each endpoint becomes a tool with:
+
+- **name**: The endpoint's `rel_name` (e.g., `:list_users` becomes `"list_users"`)
+- **description**: The endpoint's description
+- **inputSchema**: JSON Schema derived from `query_schema` and `payload_schema`
+
+### Configuration
+
+The handler accepts a block for configuration:
+
+```ruby
+mcp = Steppe::MCP::Handler.new(MyService) do |m|
+  # Instructions guide the AI on how to use your API
+  m.instructions = <<~TEXT
+    This API manages users. Use list_users to search for users by name.
+    Always use get_user to fetch details before updating a user.
+  TEXT
+
+  # Define prompts (reusable message templates)
+  m.prompt 'create_user_guide' do |p|
+    p.description = 'Guide for creating a new user'
+    p.argument :name, required: true, description: 'User name to create'
+    p.messages do |args|
+      [
+        { role: 'user', content: { type: 'text', text: "Create a user named #{args[:name]} with a valid email" } }
+      ]
+    end
+  end
+end
+```
+
+### Prompts
+
+MCP prompts are reusable message templates that guide AI behavior. They're useful for:
+
+- Providing context-specific instructions
+- Few-shot examples (user/assistant message pairs)
+- Standardizing common workflows
+
+```ruby
+m.prompt 'code_review' do |p|
+  p.description = 'Review code for issues'
+  p.argument :code, required: true
+  p.argument :language, required: false, description: 'Programming language'
+  p.messages do |args|
+    [
+      { role: 'user', content: { type: 'text', text: "Review this #{args[:language]} code:\n#{args[:code]}" } },
+      { role: 'assistant', content: { type: 'text', text: "I'll analyze this code for quality issues..." } }
+    ]
+  end
+end
+```
+
+### Session Management
+
+By default, the handler is stateless and accepts any session ID. For session validation, provide a session store:
+
+```ruby
+class RedisSessionStore
+  def initialize(redis)
+    @redis = redis
+  end
+
+  def create
+    id = SecureRandom.uuid
+    @redis.set("mcp:session:#{id}", "1", ex: 3600)
+    id
+  end
+
+  def valid?(id)
+    @redis.exists?("mcp:session:#{id}")
+  end
+
+  def delete(id)
+    @redis.del("mcp:session:#{id}")
+  end
+end
+
+mcp = Steppe::MCP::Handler.new(MyService, session_store: RedisSessionStore.new(Redis.new))
+```
+
+### Authentication Passthrough
+
+HTTP headers from the MCP request are forwarded to endpoint calls. This means your existing authentication works automatically:
+
+```ruby
+# Service with bearer auth
+MyService = Steppe::Service.new do |api|
+  api.bearer_auth 'BearerToken', store: MyTokenStore.new
+
+  api.get :protected, '/protected' do |e|
+    e.security 'BearerToken', ['read']
+    e.step { |conn| conn.valid({ secret: 'data' }) }
+    e.json 200
+  end
+end
+
+# MCP handler forwards Authorization header
+mcp = Steppe::MCP::Handler.new(MyService)
+```
+
+When an AI client calls the `protected` tool with an `Authorization` header, it's passed through to the endpoint.
+
+### MCP Protocol Methods
+
+The handler implements these MCP methods:
+
+| Method | Description |
+|--------|-------------|
+| `initialize` | Handshake, returns server capabilities and session ID |
+| `notifications/initialized` | Client acknowledgment (returns 202) |
+| `tools/list` | Returns all endpoints as tool definitions |
+| `tools/call` | Executes an endpoint with provided arguments |
+| `prompts/list` | Returns all defined prompts |
+| `prompts/get` | Returns a prompt with generated messages |
+
+### Example: Mounting with Hanami::Router
+
+```ruby
+require 'hanami/router'
+require 'steppe/mcp/handler'
+
+mcp = Steppe::MCP::Handler.new(MyService) do |m|
+  m.instructions = 'Use this API to manage users.'
+end
+
+app = Hanami::Router.new do
+  # REST API
+  scope '/api' do
+    MyService.route_with(self)
+  end
+
+  # MCP endpoint
+  post '/mcp', to: mcp
+  delete '/mcp', to: mcp
+end
+
+run app
+```
+
 ## Mount in Rack-compliant routers
 
 `Steppe::Enpoint` instances include a `#to_rack` method that turns them into Rack apps, and they have attributes like `#path` and `#verb` which allows you to mount them onto any Rack-compliant routing library.
