@@ -876,9 +876,38 @@ require 'steppe/mcp/handler'
 # Create an MCP handler from your service
 mcp = Steppe::MCP::Handler.new(MyService)
 
-# Mount as a Rack app (e.g., at /mcp)
+# Mount as a Rack app
 run mcp
 ```
+
+### Mounting in config.ru
+
+Use `Rack::Builder` to mount the MCP handler alongside your REST API:
+
+```ruby
+# config.ru
+require 'steppe/mcp/handler'
+require_relative 'my_service'
+
+mcp = Steppe::MCP::Handler.new(MyService) do |m|
+  m.instructions = 'API for managing users.'
+end
+
+# Mount REST API at root, MCP at /mcp
+app = Rack::Builder.new do
+  map '/mcp' do
+    run mcp
+  end
+
+  map '/' do
+    run MyService.route_with(Hanami::Router.new)
+  end
+end
+
+run app
+```
+
+The MCP endpoint will be available at `http://localhost:9292/mcp`.
 
 The handler implements the [MCP Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports), exposing your Steppe endpoints as MCP tools. Each endpoint becomes a tool with:
 
