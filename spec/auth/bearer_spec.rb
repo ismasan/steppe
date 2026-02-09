@@ -88,6 +88,39 @@ RSpec.describe Steppe::Auth::Bearer do
       expect(access_token.scopes).to eq(%w[read write])
     end
 
+    context 'when request already has an access token' do
+      it 'skips the store and continues if token has required scopes' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer admintoken' }
+        )
+
+        # First call authenticates and stores the token
+        conn = scheme.handle(conn, %w[read])
+        expect(conn.continue?).to be(true)
+
+        # Second call skips the store lookup and checks scopes on existing token
+        conn = scheme.handle(conn, %w[write])
+        expect(conn.continue?).to be(true)
+      end
+
+      it 'returns 403 if existing token lacks required scopes' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer publictoken' }
+        )
+
+        # First call authenticates with 'read' scope
+        conn = scheme.handle(conn, %w[read])
+        expect(conn.continue?).to be(true)
+
+        # Second call requires 'write' scope, which publictoken doesn't have
+        conn = scheme.handle(conn, %w[write])
+        expect(conn.continue?).to be(false)
+        expect(conn.response.status).to eq(403)
+      end
+    end
+
     context 'with custom token store' do
       let(:access_token_class) do
         Class.new do

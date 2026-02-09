@@ -140,11 +140,19 @@ module Steppe
       # Handle authentication and authorization for a connection.
       # Validates the Bearer token from the Authorization header and checks if it has required scopes.
       # On success, stores the access token in the request env at ACCESS_TOKEN_ENV_KEY.
+      # If the request was already authenticated, still checks scopes against the existing token.
       #
       # @param conn [Steppe::Result] The connection/result object
       # @param required_scopes [Array<String>] The scopes required for this endpoint
       # @return [Steppe::Result::Continue, Steppe::Result::Halt] The connection, or halted with 401/403 status
       def handle(conn, required_scopes)
+        access_token = conn.request.env[ACCESS_TOKEN_ENV_KEY]
+        if access_token
+          return forbidden(conn) unless access_token.allows?(conn, required_scopes)
+
+          return conn
+        end
+
         header_value = conn.request.get_header(@header).to_s.strip
         return unauthorized(conn) if header_value.empty?
 
