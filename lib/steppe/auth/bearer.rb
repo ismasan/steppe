@@ -135,7 +135,7 @@ module Steppe
       end
 
       # Request env key where the access token is stored after successful authentication.
-      ACCESS_TOKEN_ENV_KEY = 'steppe.access_token'
+      ACCESS_TOKEN_ENV_KEY = 'steppe.bearer.access_token'
 
       # Handle authentication and authorization for a connection.
       #
