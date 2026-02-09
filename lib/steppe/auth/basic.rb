@@ -90,8 +90,10 @@ module Steppe
       #
       # @param conn [Steppe::Result] The connection/result object
       # @param _required_scopes [nil] Unused parameter (Basic auth does not support scopes)
+      # @param authorizer [nil] Unused parameter. Accepted for interface consistency with {Bearer#handle}
+      #   but ignored — Basic auth does not support custom authorization.
       # @return [Steppe::Result::Continue, Steppe::Result::Halt] The connection, or halted with 401/403 status
-      def handle(conn, _required_scopes = nil)
+      def handle(conn, _required_scopes = nil, authorizer: nil)
         auth_str = conn.request.env[HTTP_AUTHORIZATION]
         return unauthorized(conn) if auth_str.nil?
 
