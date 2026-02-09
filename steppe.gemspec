@@ -33,7 +33,7 @@ Gem::Specification.new do |spec|
 
   # Uncomment to register a new dependency of your gem
   spec.add_dependency 'mustermann'
-  spec.add_dependency 'papercraft'
+  spec.add_dependency 'papercraft', '2.19'
   spec.add_dependency 'mustermann-contrib'
   spec.add_dependency 'plumb', '>= 0.0.16'
   spec.add_dependency 'rack', '>= 3.0'
