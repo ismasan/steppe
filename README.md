@@ -342,7 +342,13 @@ end
 
 #### HTML templates
 
-HTML templates rely on [Papercraft](https://papercraft.noteflakes.com). It's possible to register your own templating though.
+HTML templates rely on [Papercraft](https://papercraft.noteflakes.com), which is an **optional dependency**. If you want to use HTML responses, add it to your Gemfile:
+
+```ruby
+gem 'papercraft', '~> 2.19'
+```
+
+It's also possible to register your own templating.
 
 You can pass inline templates like in the example above, or named constants pointing to HTML components.
 

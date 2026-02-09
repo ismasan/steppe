@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'papercraft'
 require 'steppe/content_type'
 require 'steppe/serializer'
 
@@ -48,8 +47,14 @@ module Steppe
       block.is_a?(Proc) ? Class.new(Serializer, &block) : block
     end
 
+    # Papercraft is an optional dependency, only required for HTML responses.
+    # It is lazy-loaded here so JSON-only usage never needs it installed.
     inline_serializers[:html] = proc do |block|
+      require 'papercraft'
       block
+    rescue LoadError
+      raise LoadError,
+        "The 'papercraft' gem is required for HTML responses. Add `gem 'papercraft'` to your Gemfile."
     end
 
     # @return [Range] The range of HTTP status codes this responder handles

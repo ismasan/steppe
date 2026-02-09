@@ -12,7 +12,6 @@ PATH
     steppe (0.1.0)
       mustermann
       mustermann-contrib
-      papercraft (= 2.19)
       plumb (>= 0.0.16)
       rack (>= 3.0)
 
@@ -125,6 +124,7 @@ DEPENDENCIES
   debug
   docco!
   hanami-router (= 2.3.0.beta1)
+  papercraft (= 2.19)
   puma
   rack-cors
   rack-test (>= 2.1)

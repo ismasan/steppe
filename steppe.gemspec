@@ -33,11 +33,11 @@ Gem::Specification.new do |spec|
 
   # Uncomment to register a new dependency of your gem
   spec.add_dependency 'mustermann'
-  spec.add_dependency 'papercraft', '2.19'
   spec.add_dependency 'mustermann-contrib'
   spec.add_dependency 'plumb', '>= 0.0.16'
   spec.add_dependency 'rack', '>= 3.0'
 
+  spec.add_development_dependency 'papercraft', '2.19'
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html
 end
