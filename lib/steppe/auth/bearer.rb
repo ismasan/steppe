@@ -138,32 +138,57 @@ module Steppe
       ACCESS_TOKEN_ENV_KEY = 'steppe.access_token'
 
       # Handle authentication and authorization for a connection.
-      # Validates the Bearer token from the Authorization header and checks if it has required scopes.
-      # On success, stores the access token in the request env at ACCESS_TOKEN_ENV_KEY.
-      # If the request was already authenticated, still checks scopes against the existing token.
+      #
+      # Authentication runs first: extracts the Bearer token from the Authorization header,
+      # validates it against the store, and stores the resulting access token in the request env
+      # at +ACCESS_TOKEN_ENV_KEY+. If the request was already authenticated (token present in env),
+      # the authentication step is skipped.
+      #
+      # Authorization runs second. When an +authorizer+ is provided, it replaces the default
+      # +access_token.allows?(conn, required_scopes)+ check. The authorizer receives the connection,
+      # required scopes, and the authenticated access token, and must return a +Result+.
       #
       # @param conn [Steppe::Result] The connection/result object
       # @param required_scopes [Array<String>] The scopes required for this endpoint
+      # @param authorizer [#call, nil] Optional callable for custom authorization logic.
+      #   When provided, called with +(conn, required_scopes, access_token)+ instead of the
+      #   default +access_token.allows?+ check. Must return a +Result+ (continuing or halted).
       # @return [Steppe::Result::Continue, Steppe::Result::Halt] The connection, or halted with 401/403 status
-      def handle(conn, required_scopes)
+      #
+      # @example Default scope-based authorization
+      #   scheme.handle(conn, ['read:users'])
+      #
+      # @example Custom authorizer block
+      #   scheme.handle(conn, ['read:users'], authorizer: ->(conn, scopes, token) {
+      #     if token.user_id == conn.params[:id]
+      #       conn
+      #     else
+      #       conn.respond_with(403).invalid(errors: { auth: 'forbidden' })
+      #     end
+      #   })
+      def handle(conn, required_scopes, authorizer: nil)
         access_token = conn.request.env[ACCESS_TOKEN_ENV_KEY]
-        if access_token
-          return forbidden(conn) unless access_token.allows?(conn, required_scopes)
+        unless access_token
+          header_value = conn.request.get_header(@header).to_s.strip
+          return unauthorized(conn) if header_value.empty?
 
-          return conn
+          token = header_value[@matcher, 1]
+          return unauthorized(conn) if token.nil?
+
+          access_token = @store.get(token)
+          return forbidden(conn) unless access_token
+
+          conn.request.env[ACCESS_TOKEN_ENV_KEY] = access_token
         end
 
-        header_value = conn.request.get_header(@header).to_s.strip
-        return unauthorized(conn) if header_value.empty?
+        # Authorization
+        if authorizer
+          authorizer.call(conn, required_scopes, access_token)
+        else
+          return forbidden(conn) unless access_token.allows?(conn, required_scopes)
 
-        token = header_value[@matcher, 1]
-        return unauthorized(conn) if token.nil?
-
-        access_token = @store.get(token)
-        return forbidden(conn) unless access_token&.allows?(conn, required_scopes)
-
-        conn.request.env[ACCESS_TOKEN_ENV_KEY] = access_token
-        conn
+          conn
+        end
       end
     end
   end

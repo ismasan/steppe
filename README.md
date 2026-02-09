@@ -803,6 +803,57 @@ api.get :profile, '/profile' do |e|
 end
 ```
 
+#### Custom authorizer
+
+By default, authorization is handled by `access_token.allows?(conn, required_scopes)`. You can replace this check with a custom authorizer — a block or callable — to implement authorization logic that depends on dynamic data such as database records, resource ownership, or request context.
+
+The authorizer receives `(conn, required_scopes, access_token)` and must return a `Steppe::Result` (either continuing or halted). Authentication (token extraction, store lookup, and env storage) still runs first and is unchanged.
+
+**Block form:**
+
+```ruby
+api.get :user_profile, '/users/:id' do |e|
+  e.query_schema(id: Types::Lax::Integer)
+
+  e.security('BearerToken', ['users:read']) do |conn, scopes, access_token|
+    # Only allow users to view their own profile, or admins
+    if access_token.user_id == conn.params[:id] || access_token.admin?
+      conn
+    else
+      conn.respond_with(403).invalid(errors: { auth: 'not the resource owner' })
+    end
+  end
+
+  e.step do |conn|
+    conn.valid(User.find(conn.params[:id]))
+  end
+
+  e.json 200, UserSerializer
+end
+```
+
+**Callable object form:**
+
+```ruby
+class OwnerOrAdminAuthorizer
+  def call(conn, _scopes, access_token)
+    if access_token.user_id == conn.params[:id] || access_token.admin?
+      conn
+    else
+      conn.respond_with(403).invalid(errors: { auth: 'forbidden' })
+    end
+  end
+end
+
+api.get :user_profile, '/users/:id' do |e|
+  e.query_schema(id: Types::Lax::Integer)
+  e.security 'BearerToken', ['users:read'], OwnerOrAdminAuthorizer.new
+  # ...
+end
+```
+
+When no authorizer is provided, the default `access_token.allows?(conn, required_scopes)` check is used as before.
+
 #### Custom basic credential stores
 
 See the comments and interfaces in `lib/steppe/auth/basic.rb` to learn how to provide custom credential stores to the Basic auth scheme.
@@ -819,7 +870,7 @@ The custom security scheme is expected to implement the following interface:
 
 ```
 #name() => String
-#handle(Steppe::Result, endpoint_expected_scopes) => Steppe::Result
+#handle(Steppe::Result, endpoint_expected_scopes, authorizer: nil) => Steppe::Result
 #to_openapi() => Hash
 ```
 
@@ -837,8 +888,9 @@ class MyCustomAuthentication
   
    # @param conn [Steppe::Result::Continue]
    # @param endpoint_scopes [Array<String>] scopes expected by this endpoint (if any)
+   # @param authorizer [#call, nil] optional custom authorizer (see Custom authorizer section)
    # @return [Steppe::Result::Continue, Steppe::Result::Halt]
-  def handle(conn, _endpoint_scopes)
+  def handle(conn, _endpoint_scopes, authorizer: nil)
      api_token = conn.request.env[HEADER_NAME]
      return conn.respond_with(401).halt if api_token.nil?
      

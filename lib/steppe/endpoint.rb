@@ -305,15 +305,16 @@ module Steppe
     class SecurityStep
       attr_reader :header_schema, :query_schema
 
-      def initialize(scheme, scopes: [])
+      def initialize(scheme, scopes: [], authorizer: nil)
         @scheme = scheme
         @scopes = scopes
+        @authorizer = authorizer
         @header_schema = scheme.respond_to?(:header_schema) ? scheme.header_schema : Types::Hash
         @query_schema = scheme.respond_to?(:query_schema) ? scheme.query_schema : Types::Hash
       end
 
       def call(conn)
-        @scheme.handle(conn, @scopes) 
+        @scheme.handle(conn, @scopes, authorizer: @authorizer)
       end
     end
 
@@ -321,8 +322,22 @@ module Steppe
     # The security scheme must be registered in the parent Service using #security_scheme, #bearer_auth, or #basic_auth.
     # This adds a processing step that validates authentication/authorization before other endpoint logic runs.
     #
+    # Authentication (token extraction and validation) always runs first. Authorization can be
+    # customized by providing a block or an +authorizer+ callable, which replaces the default
+    # +access_token.allows?(conn, scopes)+ check. The authorizer receives the connection,
+    # required scopes, and the authenticated access token, and must return a +Result+ (either
+    # continuing or halted).
+    #
     # @param scheme_name [String] Name of the security scheme (must match a registered scheme)
     # @param scopes [Array<String>] Required permission scopes for this endpoint (not used for Basic auth)
+    # @param authorizer [#call, nil] Optional callable for custom authorization logic.
+    #   Must respond to +#call(conn, required_scopes, access_token)+ and return a +Result+.
+    # @yield [conn, required_scopes, access_token] Optional block for custom authorization logic.
+    #   Takes precedence over the +authorizer+ argument.
+    # @yieldparam conn [Steppe::Result] The current connection/result object
+    # @yieldparam required_scopes [Array<String>] The scopes declared for this endpoint
+    # @yieldparam access_token [Object] The authenticated access token from the store
+    # @yieldreturn [Steppe::Result] Must return a +Result+ — either continuing or halted
     # @return [void]
     #
     # @raise [KeyError] If the security scheme is not registered in the parent service
@@ -356,16 +371,43 @@ module Steppe
     #     # ... endpoint definition
     #   end
     #
+    # @example Custom authorizer block (e.g. checking resource ownership)
+    #   service.get :user_profile, '/users/:id' do |e|
+    #     e.security('api_key', ['read:users']) do |conn, scopes, access_token|
+    #       if access_token.user_id == conn.params[:id] || access_token.admin?
+    #         conn
+    #       else
+    #         conn.respond_with(403).invalid(errors: { auth: 'not the resource owner' })
+    #       end
+    #     end
+    #   end
+    #
+    # @example Custom authorizer object
+    #   class OwnerAuthorizer
+    #     def call(conn, _scopes, access_token)
+    #       if access_token.user_id == conn.params[:id]
+    #         conn
+    #       else
+    #         conn.respond_with(403).invalid(errors: { auth: 'forbidden' })
+    #       end
+    #     end
+    #   end
+    #
+    #   service.get :user_profile, '/users/:id' do |e|
+    #     e.security 'api_key', ['read:users'], OwnerAuthorizer.new
+    #   end
+    #
     # @note If authentication fails, returns 401 Unauthorized
-    # @note If authorization fails (missing required scopes), returns 403 Forbidden
+    # @note If authorization fails (missing required scopes or authorizer halts), returns 403 Forbidden
     # @see Service#security_scheme
     # @see Service#bearer_auth
     # @see Service#basic_auth
     # @see Auth::Bearer#handle
     # @see Auth::Basic#handle
-    def security(scheme_name, scopes = [])
+    def security(scheme_name, scopes = [], authorizer = nil, &block)
+      authorizer = block || authorizer
       scheme = service.security_schemes.fetch(scheme_name)
-      scheme_step = SecurityStep.new(scheme, scopes:)
+      scheme_step = SecurityStep.new(scheme, scopes:, authorizer:)
       @registered_security_schemes[scheme.name] = scopes
       step scheme_step
     end

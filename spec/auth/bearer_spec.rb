@@ -121,6 +121,102 @@ RSpec.describe Steppe::Auth::Bearer do
       end
     end
 
+    context 'with custom authorizer' do
+      it 'calls the authorizer block and continues when it returns conn' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer admintoken' }
+        )
+
+        authorizer = ->(c, _scopes, _token) { c }
+        conn = scheme.handle(conn, %w[write], authorizer:)
+        expect(conn.continue?).to be(true)
+        expect(conn.response.status).to eq(200)
+      end
+
+      it 'calls the authorizer block and halts when it returns a halted conn' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer admintoken' }
+        )
+
+        authorizer = ->(c, _scopes, _token) { c.respond_with(403).invalid(errors: { auth: 'denied' }) }
+        conn = scheme.handle(conn, %w[write], authorizer:)
+        expect(conn.continue?).to be(false)
+        expect(conn.response.status).to eq(403)
+      end
+
+      it 'works with an object that responds to #call' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer admintoken' }
+        )
+
+        authorizer_class = Class.new do
+          def call(conn, _scopes, _token)
+            conn
+          end
+        end
+
+        conn = scheme.handle(conn, %w[write], authorizer: authorizer_class.new)
+        expect(conn.continue?).to be(true)
+      end
+
+      it 'receives the correct conn, required_scopes, and access_token arguments' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer admintoken' }
+        )
+
+        received_args = nil
+        authorizer = ->(c, scopes, token) {
+          received_args = { conn: c, scopes: scopes, token: token }
+          c
+        }
+        scheme.handle(conn, %w[write], authorizer:)
+
+        expect(received_args[:conn]).to be_a(Steppe::Result::Continue)
+        expect(received_args[:scopes]).to eq(%w[write])
+        expect(received_args[:token]).to be_a(Steppe::Auth::Bearer::HashTokenStore::AccessToken)
+        expect(received_args[:token].scopes).to eq(%w[read write])
+      end
+
+      it 'still runs authorizer with pre-authenticated request (token already in env)' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer admintoken' }
+        )
+
+        # Pre-authenticate
+        conn = scheme.handle(conn, %w[read])
+        expect(conn.continue?).to be(true)
+
+        # Now call with authorizer - should still run the authorizer
+        authorizer_called = false
+        authorizer = ->(c, _scopes, token) {
+          authorizer_called = true
+          expect(token.scopes).to eq(%w[read write])
+          c
+        }
+        conn = scheme.handle(conn, %w[write], authorizer:)
+        expect(authorizer_called).to be(true)
+        expect(conn.continue?).to be(true)
+      end
+
+      it 'bypasses the default allows? check' do
+        conn = conn_with(
+          '/users',
+          headers: { 'HTTP_AUTHORIZATION' => 'Bearer publictoken' }
+        )
+
+        # publictoken only has 'read' scope, so default check would fail for 'write'
+        # but our custom authorizer allows it
+        authorizer = ->(c, _scopes, _token) { c }
+        conn = scheme.handle(conn, %w[write], authorizer:)
+        expect(conn.continue?).to be(true)
+      end
+    end
+
     context 'with custom token store' do
       let(:access_token_class) do
         Class.new do

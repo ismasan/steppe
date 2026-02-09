@@ -42,6 +42,7 @@ bundle exec rake release
   - Request body validation via `payload_schema`
   - Response serialization via `respond`/`serialize`
   - Processing steps via `step`
+  - Authentication/authorization via `security(scheme_name, scopes, authorizer = nil, &block)`. An optional authorizer (block or `#call` object) replaces the default `access_token.allows?` check while keeping authentication unchanged.
 
 - **Responder** (`lib/steppe/responder.rb`): Handles response formatting for specific status codes and content types. Uses ResponderRegistry for resolution.
 
@@ -50,6 +51,10 @@ bundle exec rake release
 - **Request** (`lib/steppe/request.rb`): Wrapper around Rack::Request with additional Steppe-specific functionality.
 
 - **Result** (`lib/steppe/result.rb`): Represents processing state (Continue/Halt) with params, errors, and response data.
+
+- **Auth::Bearer** (`lib/steppe/auth/bearer.rb`): Bearer token security scheme. `handle(conn, scopes, authorizer: nil)` splits authentication (token lookup) from authorization (scope check or custom authorizer).
+
+- **Auth::Basic** (`lib/steppe/auth/basic.rb`): Basic HTTP authentication scheme.
 
 ### Key Dependencies
 
@@ -75,6 +80,8 @@ Tests use RSpec and are located in `spec/`. The main test files are:
 - `spec/service_spec.rb` - Service container
 - `spec/responder_spec.rb` - Response handling
 - `spec/openapi_visitor_spec.rb` - OpenAPI generation
+- `spec/auth/bearer_spec.rb` - Bearer token auth and custom authorizers
+- `spec/auth/basic_spec.rb` - Basic HTTP auth
 
 ### Example Usage
 

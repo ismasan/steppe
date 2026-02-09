@@ -465,6 +465,84 @@ RSpec.describe Steppe::Endpoint do
     )
   end
 
+  describe '#security with custom authorizer' do
+    let(:auth_service) do
+      Steppe::Service.new do |s|
+        s.bearer_auth 'BearerAuth', store: { 'token1' => %w[read write] }, format: 'JWT'
+      end
+    end
+
+    it 'accepts a block authorizer and wires it through the pipeline' do
+      authorizer_called = false
+
+      endpoint = Steppe::Endpoint.new(auth_service, :test, :get, path: '/users') do |e|
+        e.security('BearerAuth', %w[read]) do |conn, scopes, access_token|
+          authorizer_called = true
+          expect(scopes).to eq(%w[read])
+          expect(access_token.scopes).to eq(%w[read write])
+          conn
+        end
+
+        e.step do |conn|
+          conn.continue(name: 'Joe')
+        end
+
+        e.json do
+          attribute :name, String
+          def name = object[:name]
+        end
+      end
+
+      request = build_request('/users', headers: { 'HTTP_AUTHORIZATION' => 'Bearer token1' })
+      result = endpoint.run(request)
+      expect(authorizer_called).to be(true)
+      expect(result.continue?).to be(true)
+      expect(result.response.status).to eq(200)
+    end
+
+    it 'halts the pipeline when the authorizer block returns a halted conn' do
+      endpoint = Steppe::Endpoint.new(auth_service, :test, :get, path: '/users') do |e|
+        e.security('BearerAuth', %w[read]) do |conn, _scopes, _access_token|
+          conn.respond_with(403).invalid(errors: { auth: 'custom denial' })
+        end
+
+        e.step do |conn|
+          conn.continue(name: 'Joe')
+        end
+
+        e.json do
+          attribute :name, String
+        end
+      end
+
+      request = build_request('/users', headers: { 'HTTP_AUTHORIZATION' => 'Bearer token1' })
+      result = endpoint.run(request)
+      expect(result.response.status).to eq(403)
+    end
+
+    it 'accepts an authorizer as a positional argument' do
+      custom_authorizer = ->(conn, _scopes, _token) { conn }
+
+      endpoint = Steppe::Endpoint.new(auth_service, :test, :get, path: '/users') do |e|
+        e.security 'BearerAuth', %w[read], custom_authorizer
+
+        e.step do |conn|
+          conn.continue(name: 'Joe')
+        end
+
+        e.json do
+          attribute :name, String
+          def name = object[:name]
+        end
+      end
+
+      request = build_request('/users', headers: { 'HTTP_AUTHORIZATION' => 'Bearer token1' })
+      result = endpoint.run(request)
+      expect(result.continue?).to be(true)
+      expect(result.response.status).to eq(200)
+    end
+  end
+
   specify 'default response for 204 no content' do
     endpoint = Steppe::Endpoint.new(service, :test, :post, path: '/users') do |e|
       e.step do |conn|
