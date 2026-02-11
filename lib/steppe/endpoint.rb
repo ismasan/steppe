@@ -153,6 +153,8 @@ module Steppe
         end
 
         result = payload_schema.resolve(data)
+        return conn.respond_with(422).invalid(errors: result.errors) if result.value.nil?
+
         conn = conn.copy(params: conn.params.merge(result.value))
         return conn if result.valid?
 

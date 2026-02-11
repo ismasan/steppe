@@ -314,6 +314,16 @@ RSpec.describe Steppe::Endpoint do
       end
     end
 
+    context 'with a request body that resolves to nil' do
+      it 'sets status to 422 with empty params' do
+        request = build_request('/users', body: 'null')
+        result = endpoint.run(request)
+        expect(result.response.status).to eq(422)
+        expect(result.params).to eq({})
+        expect(result.errors).not_to be_empty
+      end
+    end
+
     context 'with valid params and no explicit responder' do
       it 'uses default responder/serializer' do
         request = build_request('/users/1', body: '{"name": "Joe", "age": "19", "address": "Big House"}')
