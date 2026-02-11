@@ -101,6 +101,16 @@ module Steppe
       # Internal method that defines attribute reader methods.
       # Automatically creates methods that delegate to @object.attribute_name
       def __plumb_define_attribute_reader_method__(name)
+        # Don't override custom methods inherited from parent classes.
+        # When a subclass is created, Plumb's `inherited` hook re-registers
+        # all parent attributes, which would overwrite custom reader methods.
+        # Auto-generated readers have their source in this file, so if an
+        # existing method originates elsewhere, it's a custom override to preserve.
+        if method_defined?(name)
+          source_file, = instance_method(name).source_location
+          return if source_file && source_file != __FILE__
+        end
+
         class_eval <<~RUBY, __FILE__, __LINE__ + 1
         def #{name} = @object.#{name}
         RUBY
