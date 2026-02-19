@@ -442,6 +442,27 @@ openapi_spec = Steppe::OpenAPIVisitor.call(MyAPI)
 <img width="831" height="855" alt="CleanShot 2025-10-06 at 18 04 55" src="https://github.com/user-attachments/assets/fea61225-538b-4653-bdd0-9f8b21c8c389" />
 Using the [Swagger UI](https://swagger.io/tools/swagger-ui/) tool to view a Steppe API definition.
 
+You can host this HTML page, pointing it to your OpenAPI endpoint.
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: "/api/openapi.json",
+      dom_id: "#swagger-ui"
+    });
+  </script>
+</body>
+</html>
+```
+
 ### Custom Types
 
 Define custom validation types using [Plumb](https://github.com/ismasan/plumb):
